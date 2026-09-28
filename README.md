@@ -1,6 +1,22 @@
 # NightCode
 
-A terminal (TUI) app built with [Bun](https://bun.sh), React and [OpenTUI](https://github.com/sst/opentui).
+An AI coding agent for the terminal, inspired by Claude Code — built from scratch with [Bun](https://bun.sh), React and [OpenTUI](https://github.com/sst/opentui).
+
+## Roadmap
+
+Built following [this video tutorial](https://www.youtube.com/watch?v=k_D_C3ExypU), one chapter at a time. Each chapter is developed on its own branch and merged into `main` through a pull request.
+
+- [x] Project Setup
+- [ ] UI Infrastructure — in progress
+- [ ] Routing & Screen Layout
+- [ ] Server, Shared Package & Database
+- [ ] Sentry Monitoring
+- [ ] AI Chat Streaming
+- [ ] Session Management
+- [ ] Tool Calling
+- [ ] Completing The User Experience
+- [ ] Usage Based Billing
+- [ ] Client-Side Tool Execution
 
 ## Requirements
 
@@ -10,8 +26,8 @@ A terminal (TUI) app built with [Bun](https://bun.sh), React and [OpenTUI](https
 ## Setup
 
 ```bash
-git clone https://github.com/elina4675/NightCode.git
-cd NightCode
+git clone https://github.com/anhelinaroik-tech/NightCode-Project.git
+cd NightCode-Project
 bun install
 ```
 
