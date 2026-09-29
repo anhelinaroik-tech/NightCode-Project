@@ -7,6 +7,7 @@ import { StatusBar } from "./status-bar";
 import { CommandMenu } from "./command-menu";
 import type { Command } from "./command-menu/types";
 import { useCommandMenu } from "./command-menu/use-command-menu";
+import { useToast } from "../providers/toast";
 
 type Props = {
     onSubmit: (text: string) => void;
@@ -24,7 +25,8 @@ export function InputBar({ onSubmit, disabled = false }: Props){
     const textareRef = useRef<TextareaRenderable>(null);
     const onSubmitRef = useRef<() => void>(() => {});
     const renderer =    useRenderer();
-
+    const toast = useToast();
+    
     const {
         showCommandMenu,
         commandQuery,
@@ -34,15 +36,6 @@ export function InputBar({ onSubmit, disabled = false }: Props){
         resolveCommand,
         setSelectedIndex,
     } = useCommandMenu();
-
-    const handleCommandExecute = useCallback(
-    (index: number) => {
-        const command = resolveCommand(index);
-        handleCommand(command);
-        
-    },
-    [],
-    );
 
     const handleTextareaContentChange = useCallback(() => {
         const textarea = textareRef.current;
@@ -75,11 +68,20 @@ export function InputBar({ onSubmit, disabled = false }: Props){
         if(command.action){
             command.action({
                 exit: () => renderer.destroy(),
+                toast,
             });
         } else {
             textarea.insertText(command.value + " ");
         }
-    }, []);
+    }, [renderer, toast]);
+
+    const handleCommandExecute = useCallback(
+        (index: number) => {
+            const command = resolveCommand(index);
+            handleCommand(command);
+        },
+        [],
+        );
  
     useEffect(() => {
         const textarea = textareRef.current;
