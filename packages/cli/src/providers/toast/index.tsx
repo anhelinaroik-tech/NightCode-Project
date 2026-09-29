@@ -6,6 +6,7 @@ import { useTerminalDimensions } from "@opentui/react";
 import type { ToastOptions, ToastVariant } from "./types";
 import { DEFAULT_DURATION } from "./types";
 import {SplitBorderCharts} from "../../components/border";
+import { useTheme } from "../theme";
 
 export type ToastContextValue = {
     show: (options: ToastOptions) => void;
@@ -68,15 +69,16 @@ type ToastProps={
 
 function Toast({currentToast}: ToastProps){
     const {width} = useTerminalDimensions();
+    const { colors} = useTheme();
 
     if(!currentToast){
         return null;
     }
 
     const variantColors: Record<ToastVariant, string> = {
-        success:"#82E0AA",
-        error:"#E74C5E",
-        info:"#56D6C2"
+        success:colors.success,
+        error:colors.error,
+        info:colors.info,
     };
 
     const borderColor=currentToast.variant
@@ -95,7 +97,7 @@ function Toast({currentToast}: ToastProps){
             paddingRight={2}
             paddingTop={1}
             paddingBottom={1}
-            backgroundColor="#1A1A24"
+            backgroundColor={colors.dialogSurface}
             borderColor={borderColor}
             border={["left", "right"]}
             customBorderChars={SplitBorderCharts}

@@ -4,24 +4,41 @@ import { Header } from "./components/header";
 import { StatusBar } from "./components/status-bar";
 import { InputBar } from "./components/input-bar";
 import { ToastProvider } from "./providers/toast";
+import { KeyboardLayerProvider } from "./providers/keyboard-layer";
+import { DialogProvider } from "./providers/dialog";
+import { ThemeProvider, useTheme } from "./providers/theme";
 
-function App() {
+function ThemeRoot() {
+  const { colors } = useTheme();
+
   return (
-    <ToastProvider>
     <box
       alignItems="center"
       justifyContent="center"
-      backgroundColor="#0D0D12"
+      backgroundColor={colors.background}
       width="100%"
       height="100%"
-      gap={2} 
+      gap={2}
     >
       <Header />
       <box width="100%" maxWidth={78} padding={2}>
-        <InputBar onSubmit={() => {}}/>
+        <InputBar onSubmit={() => {}} />
       </box>
     </box>
-    </ToastProvider>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <KeyboardLayerProvider>
+        <DialogProvider>
+          <ToastProvider>
+            <ThemeRoot />
+          </ToastProvider>
+        </DialogProvider>
+      </KeyboardLayerProvider>
+    </ThemeProvider>
   );
 }
 
