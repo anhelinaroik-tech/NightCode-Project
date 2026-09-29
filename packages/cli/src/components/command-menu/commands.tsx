@@ -53,7 +53,7 @@ export const COMMANDS: Command[] = [
     },
     {
         name: "login",
-        description: "Sing in woth your browser",
+        description: "Sign in with your browser",
         value: "/login",
         action: (ctx)=>{
             ctx.toast.show({message: "Opening browser to sign in..."});
@@ -61,7 +61,7 @@ export const COMMANDS: Command[] = [
     },
     {
         name: "logout",
-        description: "Sing out of your account",
+        description: "Sign out of your account",
         value: "/logout",
         action: (ctx)=>{
             ctx.toast.show({variant: "success", message: "Sign out"});

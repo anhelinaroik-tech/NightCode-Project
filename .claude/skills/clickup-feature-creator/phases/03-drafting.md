@@ -49,7 +49,7 @@ Name: [<repo-tag>] <Action-oriented title>
 ## AI Context rules
 - Every reference must be a real file path found during codebase exploration
 - Never write generic advice like "follow existing patterns" — name the pattern file
-- Cross-reference related ticket IDs once they exist (add in Phase 4 after creation)
+- Cross-reference related ticket IDs once they exist (added in Phase 4, Step 4, after all tickets are created)
 
 ## Done
 

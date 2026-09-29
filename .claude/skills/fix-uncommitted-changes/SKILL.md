@@ -21,5 +21,6 @@ description: Address issues identified by the most recent /review-uncommitted-ch
 
 ## Output
 
-- "I have applied fixes for the following review points: [List of points]"
+- If you changed code: "I have applied fixes for the following review points: [List of points]"
+- If you only suggested fixes: "I suggest the following fixes (not yet applied): [List of points]"
 - Followed by the code blocks or file updates.

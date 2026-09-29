@@ -129,7 +129,8 @@ When fixes were made, prepare a commit preview for the human:
 ```bash
 git status
 git diff --stat
-git diff          # full unstaged diff, or staged if you ran git add
+git diff --cached # staged changes (what will be committed)
+git diff          # remaining unstaged changes
 git log -5 --oneline
 ```
 

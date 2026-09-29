@@ -8,8 +8,8 @@ export type CommandContext = {
 }
 
 export type Command = {
-    name: string; 
+    name: string;
     description: string;
     value: string;
-    action?: (ctx:  CommandContext) => void | Promise<void>;
+    action?: (ctx: CommandContext) => void;
 }

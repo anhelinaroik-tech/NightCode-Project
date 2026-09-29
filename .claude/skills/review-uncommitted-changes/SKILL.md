@@ -5,9 +5,9 @@ description: Review uncommitted git changes against a quality checklist (functio
 
 ## Step 1: Identify Uncommitted Changes
 
-- Run `git diff --name-only` to find files with unstaged or staged changes.
+- Run `git diff --name-only` (unstaged) and `git diff --cached --name-only` (staged) to find changed files.
 - If no files are changed, stop and inform me.
-- For each changed file, run `git diff [filename]` to get the specific additions/deletions.
+- For each changed file, run `git diff [filename]` and `git diff --cached [filename]` to get the specific additions/deletions.
 
 ## Step 2: Apply Review Checklist
 

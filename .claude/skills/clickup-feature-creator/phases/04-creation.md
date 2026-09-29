@@ -33,7 +33,11 @@ For each Feature ticket, call `clickup_add_task_dependency`:
 
 This marks the EPIC as blocked until all Features are complete.
 
-## Step 4: Confirm
+## Step 4: Add cross-references
+
+Now that every Feature has a task ID, call `clickup_update_task` for each Feature whose AI Context references another ticket. Set `markdown_description` to the Step 2 content with the related ticket IDs filled in.
+
+## Step 5: Confirm
 
 Present a summary:
 - EPIC name + URL
