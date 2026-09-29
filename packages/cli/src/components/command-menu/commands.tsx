@@ -28,12 +28,12 @@ export const COMMANDS: Command[] = [
     },
     {
         name: "login",
-        description: "Sing in woth your browser",
+        description: "Sign in with your browser",
         value: "/login",
     },
     {
         name: "logout",
-        description: "Sing out of your account",
+        description: "Sign out of your account",
         value: "/logout",
     },
     {

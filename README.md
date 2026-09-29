@@ -57,7 +57,7 @@ bun run --cwd packages/cli typecheck
 
 ## Configuration
 
-Configuration is read from environment variables. `.env.example` lists every variable with a placeholder value and is safe to commit. Your real `.env` is git-ignored — never commit it or put real secrets in `.env.example`.
+Nothing reads environment variables yet — `.env` is reserved for later chapters. `.env.example` lists every variable with a placeholder value and is safe to commit. Your real `.env` is git-ignored — never commit it or put real secrets in `.env.example`.
 
 ## Project structure
 
