@@ -26,7 +26,7 @@ Present a numbered list — short names with one-line descriptions:
 Wait for confirmation before drafting full ticket content.
 
 ## Breakdown rules
-- 5-10 Feature tickets per EPIC 
+- 4–7 Feature tickets per EPIC 
 - Group by technical boundary: schema → backend → frontend → integration
 - Each ticket ~1–3 days of work
 - Tickets should be independently implementable with minimal cross-dependencies

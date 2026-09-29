@@ -6,7 +6,7 @@ An AI coding agent for the terminal, inspired by Claude Code — built from scra
 
 Built following [this video tutorial](https://www.youtube.com/watch?v=k_D_C3ExypU), one chapter at a time. Each chapter is developed on its own branch and merged into `main` through a pull request.
 
-- [x] Project Setup
+- [ ] Project Setup — in review
 - [ ] UI Infrastructure — in progress
 - [ ] Routing & Screen Layout
 - [ ] Server, Shared Package & Database
