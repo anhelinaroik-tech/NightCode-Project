@@ -2,12 +2,18 @@ import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
 import { InputBar } from "./input-bar";
 import { Spinner } from "./spinner";
+import type { SupportedChatModelId } from "@nightcode/shared";
+import type { Mode } from "@nightcode/database/enums";
 
 type Props = {
   children?: ReactNode;
   onSubmit: (text: string) => void;
   inputDisabled?: boolean;
   loading?: boolean;
+  interruptible?: boolean;
+  onInterrupt?: () => void;
+  mode?: Mode;
+  model?: SupportedChatModelId;
 };
 
 export function SessionShell({
@@ -15,6 +21,10 @@ export function SessionShell({
     onSubmit,
     inputDisabled = false,
     loading = false,
+    interruptible = false,
+    onInterrupt,
+    mode,
+    model,
 }: Props){
     return(
         <box
@@ -30,7 +40,13 @@ export function SessionShell({
                 <box gap={1}>{children}</box>
             </scrollbox>
             <box flexShrink={0}>
-                <InputBar onSubmit={onSubmit} disabled={inputDisabled}/>
+                <InputBar
+                onSubmit={onSubmit}
+                disabled={inputDisabled}
+                mode={mode}
+                model={model}
+                onCancel={interruptible ? onInterrupt : undefined}
+                />
             </box>
             <box
             flexShrink={0}
@@ -41,7 +57,12 @@ export function SessionShell({
             paddingLeft={1}
             >
                 <box flexDirection="row" alignItems="center" gap={2}>
-                    {loading ? <Spinner/> : null}
+                    {loading ? (
+                        <>
+                        <Spinner />
+                        {interruptible ? <text>esc to interrupt</text> : null}
+                        </>
+                    ): null}
                 </box>
                 <box flexDirection="row" gap={1} flexShrink={0} marginLeft="auto">
                     <text>tab</text>
