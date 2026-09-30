@@ -2,7 +2,6 @@ import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
 import { InputBar } from "./input-bar";
 import { Spinner } from "./spinner";
-import { useTheme } from "../providers/theme";
 import type { SupportedChatModelId } from "@nightcode/shared";
 import type { Mode } from "@nightcode/database/enums";
 
@@ -27,7 +26,6 @@ export function SessionShell({
     mode,
     model,
 }: Props){
-    const { colors } = useTheme();
     return(
         <box
         flexDirection="column"
@@ -68,7 +66,7 @@ export function SessionShell({
                 </box>
                 <box flexDirection="row" gap={1} flexShrink={0} marginLeft="auto">
                     <text>tab</text>
-                    <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>agents</text>
+                    <text attributes={TextAttributes.DIM}>agents</text>
                 </box>
             </box>
         </box>
