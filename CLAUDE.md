@@ -29,7 +29,7 @@ Bun workspace monorepo (`workspaces: ["packages/*"]`). Shared compiler options l
 - `packages/cli` (`@nightcode/cli`) — the OpenTUI app.
 - `packages/server` (`@nightcode/server`) — Hono API. `src/index.ts` checks the DB connection at startup and exits with code 1 and a readable message if it fails; routes are `/health` (200 / 503 depending on DB) and `/sessions` (list, get by id, create). It exports `AppType` for the typed client.
 - `packages/shared` (`@nightcode/shared`) — supported chat models and Zod schemas for message parts / stream events, imported by both CLI and server. Put cross-package types here instead of redefining them.
-- `packages/database` (`@nightcode/database`) — Prisma 7 with the `pg` driver adapter. `prisma/schema.prisma` + `prisma/migrations`; exports `db`, `checkDatabaseConnection` and the generated types, and enums via `@nightcode/database/enums`.
+- `packages/database` (`@nightcode/database`) — Prisma 7 with the `pg` driver adapter. `prisma/schema.prisma` + `prisma/migrations`; the root export is the generated types only (safe to import without `DATABASE_URL`); `db` and `checkDatabaseConnection` come from `@nightcode/database/client`, enums from `@nightcode/database/enums`.
 
 ### CLI ↔ server
 
