@@ -12,6 +12,7 @@ type Props = {
   inputDisabled?: boolean;
   loading?: boolean;
   interruptible?: boolean;
+  onInterrupt?: () => void;
   mode?: Mode;
   model?: SupportedChatModelId;
 };
@@ -22,6 +23,7 @@ export function SessionShell({
     inputDisabled = false,
     loading = false,
     interruptible = false,
+    onInterrupt,
     mode,
     model,
 }: Props){
@@ -40,7 +42,13 @@ export function SessionShell({
                 <box gap={1}>{children}</box>
             </scrollbox>
             <box flexShrink={0}>
-                <InputBar onSubmit={onSubmit} disabled={inputDisabled} mode={mode} model={model}/>
+                <InputBar
+                onSubmit={onSubmit}
+                disabled={inputDisabled}
+                mode={mode}
+                model={model}
+                onCancel={interruptible ? onInterrupt : undefined}
+                />
             </box>
             <box
             flexShrink={0}
