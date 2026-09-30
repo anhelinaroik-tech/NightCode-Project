@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { checkDatabaseConnection } from "@nightcode/database";
+import { checkDatabaseConnection } from "@nightcode/database/client";
 import sessions from "./routes/sessions"
 import chat from "./routes/chat"
 import health from "./routes/health"

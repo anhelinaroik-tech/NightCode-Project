@@ -11,8 +11,8 @@ export async function getErrorMessage(response: ErrorResponse){
             return data.error;
         }
     } catch{
-    // Ignore invalid error payloads and fall back to the status textbelow.
+    // Ignore invalid error payloads and fall back to the status text below.
     }
 
-    return response.statusText || `Request failed ith status ${response.status}`;
+    return response.statusText || `Request failed with status ${response.status}`;
 };

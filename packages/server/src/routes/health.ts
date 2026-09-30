@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { checkDatabaseConnection } from "@nightcode/database";
+import { checkDatabaseConnection } from "@nightcode/database/client";
 
 const app = new Hono()
     .get("/", async (c)=> {

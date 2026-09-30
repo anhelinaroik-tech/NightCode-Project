@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {z} from "zod";
 import { DEFAULT_CHAT_MODEL_ID } from "@nightcode/shared";
 import { useNavigate, useLocation } from "react-router";
@@ -65,7 +65,7 @@ const state = useMemo(()=> {
         );
       } catch (error){
         if (ignore) return;
-        toast. show({
+        toast.show({
           variant: "error",
           message: error instanceof Error ? error.message : "Failed to create session",
         });
