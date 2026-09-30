@@ -4,7 +4,7 @@ import {zValidator} from "@hono/zod-validator"
 import {z} from "zod";
 import {db} from "@nightcode/database";
 import { Role, Mode, MessageStatus} from "@nightcode/database/enums";
-
+import * as Sentry from "@sentry/hono/bun";
 import { findSupportedChatModel } from "@nightcode/shared";
 
 const createSessionSchema = z.object({
@@ -22,6 +22,10 @@ const createSessionSchema = z.object({
 const CreateSessionValidator = zValidator(
     "json", createSessionSchema, (result, c) => {
     if(!result.success){
+        Sentry.logger.warn("Session creation validation failed",{
+            path: c.req.path,
+            issues: result.error.issues.length,
+        });
         // c - context of some HTTP-request
         return c.json({error: "Invalid request body"}, 400);
     }
@@ -37,6 +41,11 @@ const app = new Hono()
                 createdAt:true,
             },
         });
+
+        Sentry.logger.info("Listed sessions", {
+            count: sessions.length,
+        });
+
         return c.json(sessions);
     })
     // loading individual session
@@ -59,8 +68,16 @@ const app = new Hono()
     });
 
     if(!session){
+        Sentry.logger.info("Session not found", {
+            sessionId: id,
+            userId: "mock-user",
+        });
         return c.json({error: "Session not found"}, 404);
     }
+
+    Sentry.logger.info("Loaded session",{
+        sessionId: session.id,
+    })
 
     return c.json(session);
 })
@@ -90,6 +107,13 @@ const app = new Hono()
         },
         include:{messages:true},
     });
+
+    Sentry.logger.info("Created session",{
+        sessionId: session.id,
+        title: session.title,
+        cwd: session.cwd,
+    })
+
     return c.json(session,201);
 });
 
