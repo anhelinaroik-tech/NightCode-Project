@@ -109,6 +109,7 @@ function SessionChat({ session }: { session: SessionData }) {
       onSubmit={(text) => submit({ userText: text, mode, model })}
       loading={streaming.status === "streaming"}
       interruptible={streaming.status === "streaming"}
+      onInterrupt={interrupt}
       mode={mode}
       model={model}
     >

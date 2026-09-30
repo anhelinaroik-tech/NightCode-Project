@@ -3,6 +3,7 @@ import React, {
     useContext,
     useState,
     useCallback,
+    useMemo,
     useRef,
 } from "react";
 import { useKeyboard ,useRenderer } from "@opentui/react";
@@ -42,12 +43,13 @@ export function KeyboardLayerProvider({children}: {children: React.ReactNode}){
 
     const pop = useCallback((id:string)=> {
         responders.current.delete(id);
-        setStack((prev) => prev.filter((layer)=> layer !==id)); 
+        // Keep the same array when id isn't on the stack, so callers can pop freely without re-rendering.
+        setStack((prev) => prev.includes(id) ? prev.filter((layer)=> layer !==id) : prev);
     }, []);
 
     const isTopLayer = useCallback(
         (id: string) => {
-            return stack.length===0 || stack[stack.length-1]===id;
+            return stack[stack.length-1]===id;
         }, [stack],
     );
 
@@ -80,8 +82,13 @@ export function KeyboardLayerProvider({children}: {children: React.ReactNode}){
         renderer.destroy();
     });
 
+    const value = useMemo<KeyboardLayerContextValue>(
+        () => ({ push, pop, isTopLayer, setResponder }),
+        [push, pop, isTopLayer, setResponder],
+    );
+
     return(
-        <KeyboardLayerContext.Provider value={{push, pop, isTopLayer, setResponder}}>
+        <KeyboardLayerContext.Provider value={value}>
             {children}
         </KeyboardLayerContext.Provider>
     );
