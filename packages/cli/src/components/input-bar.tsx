@@ -72,10 +72,16 @@ export function InputBar({ onSubmit, disabled = false }: Props){
         textarea.setText("");
 
         if(command.action){
-            command.action({
-                exit: () => renderer.destroy(),
-                toast,
-                dialog,
+            // Actions may be async; catch failures so they don't become unhandled rejections.
+            void Promise.resolve(
+                command.action({
+                    exit: () => renderer.destroy(),
+                    toast,
+                    dialog,
+                }),
+            ).catch((error: unknown) => {
+                const reason = error instanceof Error ? error.message : String(error);
+                toast.show({ variant: "error", message: `${command.value} failed: ${reason}` });
             });
         } else {
             textarea.insertText(command.value + " ");
