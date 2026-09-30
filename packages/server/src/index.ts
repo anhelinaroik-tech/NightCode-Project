@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { checkDatabaseConnection } from "@nightcode/database";
 import sessions from "./routes/sessions"
+import chat from "./routes/chat"
 import health from "./routes/health"
 import * as Sentry from "@sentry/hono/bun";
 
@@ -50,7 +51,8 @@ app.onError((error, c)=> {
 // registered to app all routes
 const routes = app
     .route("/health", health)
-    .route("/sessions", sessions);
+    .route("/sessions", sessions)
+    .route("/chat", chat);
 export type AppType = typeof routes;
 
 // Fail fast with a readable message instead of serving requests that will all fail
