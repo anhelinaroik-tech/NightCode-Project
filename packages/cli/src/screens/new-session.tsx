@@ -2,8 +2,7 @@ import { useEffect, useEffectEvent, useMemo, useRef } from "react";
 import {z} from "zod";
 import { DEFAULT_CHAT_MODEL_ID } from "@nightcode/shared";
 import { useNavigate, useLocation } from "react-router";
-import { useTheme } from "../providers/theme";
-import { UserMessage } from "../components/messages/user-message";
+import { UserMessage } from "../components/messages";
 import { SessionShell } from "../components/session-shell"; 
 
 import {useToast} from "../providers/toast";
@@ -17,7 +16,6 @@ const newSessionStateSchema = z.object({
 export function NewSession() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { colors } = useTheme();
   const toast = useToast(); 
   const hasStartedRef = useRef(false);
 

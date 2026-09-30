@@ -29,7 +29,7 @@ export function BotMessage({
     return(
         <box width="100%" alignItems="center">
             <box paddingY={1} width="100%">
-                <box paddingX={2} width="100%">
+                <box paddingX={3} width="100%">
                     <text>{text}</text>
                 </box>
             </box>
