@@ -2,9 +2,9 @@
 
 An AI coding agent for the terminal, inspired by Claude Code — built from scratch with [Bun](https://bun.sh), React and [OpenTUI](https://github.com/sst/opentui).
 
-This project follows [this video tutorial](https://www.youtube.com/watch?v=k_D_C3ExypU), one chapter at a time. Each chapter is developed on its own branch and merged into `main` through a pull request.
-
 ## Roadmap
+
+Built following [this video tutorial](https://www.youtube.com/watch?v=k_D_C3ExypU), one chapter at a time. Each chapter is developed on its own branch and merged into `main` through a pull request.
 
 - [ ] Project Setup — in review
 - [ ] UI Infrastructure — in progress
@@ -18,10 +18,56 @@ This project follows [this video tutorial](https://www.youtube.com/watch?v=k_D_C
 - [ ] Usage Based Billing
 - [ ] Client-Side Tool Execution
 
-## Tech stack
+## Requirements
 
-- **Runtime:** Bun
-- **Language:** TypeScript
-- **Terminal UI:** OpenTUI + React
+- [Bun](https://bun.sh) `>= 1.3.0`
+- A terminal that supports TUI apps (run it in a real terminal, not a piped/CI shell)
 
-Setup and run instructions will appear here once the first chapter is merged.
+## Setup
+
+```bash
+git clone https://github.com/anhelinaroik-tech/NightCode-Project.git
+cd NightCode-Project
+bun install
+```
+
+Copy the example configuration and fill in your own values (see [Configuration](#configuration)):
+
+```bash
+cp .env.example .env
+```
+
+## Run
+
+From the repository root:
+
+```bash
+bun run dev
+```
+
+This starts `packages/cli/src/index.tsx` in watch mode, so the app restarts when you edit a file.
+
+## Checks
+
+Type-check the CLI package:
+
+```bash
+bun run --cwd packages/cli typecheck
+```
+
+## Configuration
+
+Nothing reads environment variables yet — `.env` is reserved for later chapters. `.env.example` lists every variable with a placeholder value and is safe to commit. Your real `.env` is git-ignored — never commit it or put real secrets in `.env.example`.
+
+## Project structure
+
+```
+packages/cli/src/
+├── index.tsx            # app entry point
+└── components/
+    ├── command-menu/    # slash-command menu (list, filtering, keyboard hook)
+    ├── header.tsx
+    ├── input-bar.tsx
+    ├── status-bar.tsx
+    └── border.tsx
+```
