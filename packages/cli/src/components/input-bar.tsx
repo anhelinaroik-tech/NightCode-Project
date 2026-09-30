@@ -11,10 +11,14 @@ import { useToast } from "../providers/toast";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { useDialog } from "../providers/dialog";
 import { useTheme } from "../providers/theme";
+import type { SupportedChatModelId } from "@nightcode/shared";
+import type { Mode } from "@nightcode/database/enums";
 
 type Props = {
     onSubmit: (text: string) => void;
     disabled?: boolean;
+    mode?: Mode;
+    model?: SupportedChatModelId;
 };
 
 export const TEXTAREA_KEY_BINDINGS: KeyBinding [] = [
@@ -24,7 +28,7 @@ export const TEXTAREA_KEY_BINDINGS: KeyBinding [] = [
     { name: "enter", shift: true, action: "newline" },
 ]
 
-export function InputBar({ onSubmit, disabled = false }: Props){
+export function InputBar({ onSubmit, disabled = false, mode, model }: Props){
     const textareRef = useRef<TextareaRenderable>(null);
     const onSubmitRef = useRef<() => void>(() => {});
     const renderer =    useRenderer();
@@ -173,7 +177,7 @@ export function InputBar({ onSubmit, disabled = false }: Props){
                     onContentChange={handleTextareaContentChange}
                     placeholder={`Ask anything... "Fix a bug in database"`}
                     />
-                    <StatusBar/>
+                    <StatusBar mode={mode} model={model}/>
                 </box>
             </box>
         </box>

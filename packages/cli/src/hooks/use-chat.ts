@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, act } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { EventSourceParserStream } from "eventsource-parser/stream";
 import prettyMs from "pretty-ms";
 import type { ClientResponse } from "hono/client"; 
@@ -9,9 +9,6 @@ import {
 chatStreamEventSchema, 
 type SupportedChatModelId
 } from "@nightcode/shared";
-import { requestId } from "hono/request-id";
-import { AppContext } from "@opentui/react";
-import { measureText } from "@opentui/core";
 
 export type ClientMessagePart = { type: "text"; text: string};
 
@@ -262,7 +259,7 @@ export function useChat(
             
         } catch (err) {
             if(err instanceof DOMException && err.name === "AbortError") return;
-            if(isActiveRequest(activeStream.requestId)) return;
+            if(!isActiveRequest(activeStream.requestId)) return;
             const msg = err instanceof Error ? err.message:String(err);
             updateMessages((prev)=> [
                 ...prev,

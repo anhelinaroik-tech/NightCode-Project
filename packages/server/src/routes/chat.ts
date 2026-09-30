@@ -9,7 +9,7 @@ import { type ChatStreamEvent } from "@nightcode/shared";
 import {isSupportedChatModel, resolveChatModel} from "../lib/models";
 
 const submitSchema = z.object({
-    content: z.string(),
+    content: z.string().trim().min(1, "Message cannot be empty"),
     mode: z.enum(Mode),
     model: z.string().refine(isSupportedChatModel, "Unsupported chat model"),
 });
@@ -122,7 +122,7 @@ async function streamAIResponse(
                 model,
                 content: fullText,
                 mode,
-                duration: Math.round(elapsedMs /100),
+                duration: Math.round(elapsedMs / 1000),
             },
         });
 
@@ -168,7 +168,7 @@ const app = new Hono()
         });
 
         if(!session){
-            return c.json({error: "Sessoin not found"}, 404);
+            return c.json({error: "Session not found"}, 404);
         }
 
         const resumableMessage = getResumableUserMessage(session.messages);
@@ -237,7 +237,7 @@ const app = new Hono()
         });
 
         if(!session){
-            return c.json({erros: "Session not found"}, 404);
+            return c.json({error: "Session not found"}, 404);
         }
 
         const data = c.req.valid("json");

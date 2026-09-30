@@ -16,7 +16,7 @@ import {
 } from "@nightcode/shared";
 import { useChat } from "../hooks/use-chat";
 import type { Message, ClientMessagePart } from "../hooks/use-chat";
-import { MessageStatus } from "@nightcode/database/enums";
+import { MessageStatus, type Mode } from "@nightcode/database/enums";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 
 type SessionData = InferResponseType<
@@ -81,6 +81,9 @@ function ChatMessage({ msg }: { msg: Message }) {
 function SessionChat({ session }: { session: SessionData }) {
   const [initialMessages] = useState(() => mapDbMessages(session.messages));
   const { isTopLayer } = useKeyboardLayer();
+  // Single source for what is sent to the server and shown in the status bar
+  const mode: Mode = "BUILD";
+  const model: SupportedChatModelId = DEFAULT_CHAT_MODEL_ID;
   const { messages, streaming, submit, abort, interrupt } = useChat(
     session.id,
     initialMessages
@@ -103,11 +106,11 @@ function SessionChat({ session }: { session: SessionData }) {
 
   return (
     <SessionShell
-      onSubmit={(text) =>
-        submit({ userText: text, mode: "BUILD", model: DEFAULT_CHAT_MODEL_ID })
-      }
+      onSubmit={(text) => submit({ userText: text, mode, model })}
       loading={streaming.status === "streaming"}
       interruptible={streaming.status === "streaming"}
+      mode={mode}
+      model={model}
     >
       {messages.map((msg) => (
         <ChatMessage key={msg.id} msg={msg} />

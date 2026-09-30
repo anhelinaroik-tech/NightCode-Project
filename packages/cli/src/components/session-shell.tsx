@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { InputBar } from "./input-bar";
 import { Spinner } from "./spinner";
 import { useTheme } from "../providers/theme";
+import type { SupportedChatModelId } from "@nightcode/shared";
+import type { Mode } from "@nightcode/database/enums";
 
 type Props = {
   children?: ReactNode;
@@ -10,6 +12,8 @@ type Props = {
   inputDisabled?: boolean;
   loading?: boolean;
   interruptible?: boolean;
+  mode?: Mode;
+  model?: SupportedChatModelId;
 };
 
 export function SessionShell({
@@ -18,6 +22,8 @@ export function SessionShell({
     inputDisabled = false,
     loading = false,
     interruptible = false,
+    mode,
+    model,
 }: Props){
     const { colors } = useTheme();
     return(
@@ -34,7 +40,7 @@ export function SessionShell({
                 <box gap={1}>{children}</box>
             </scrollbox>
             <box flexShrink={0}>
-                <InputBar onSubmit={onSubmit} disabled={inputDisabled}/>
+                <InputBar onSubmit={onSubmit} disabled={inputDisabled} mode={mode} model={model}/>
             </box>
             <box
             flexShrink={0}
