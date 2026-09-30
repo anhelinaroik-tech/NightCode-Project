@@ -7,10 +7,16 @@ import { StatusBar } from "./status-bar";
 import { CommandMenu } from "./command-menu";
 import type { Command } from "./command-menu/types";
 import { useCommandMenu } from "./command-menu/use-command-menu";
+import { useToast } from "../providers/toast";
+import { useKeyboardLayer } from "../providers/keyboard-layer";
+import { useDialog } from "../providers/dialog";
+import { useTheme } from "../providers/theme";
 
 type Props = {
     onSubmit: (text: string) => void;
     disabled?: boolean;
+    // Cancels the running response; while set, ctrl+c calls it instead of exiting.
+    onCancel?: () => void;
 };
 
 export const TEXTAREA_KEY_BINDINGS: KeyBinding [] = [
@@ -20,11 +26,15 @@ export const TEXTAREA_KEY_BINDINGS: KeyBinding [] = [
     { name: "enter", shift: true, action: "newline" },
 ]
 
-export function InputBar({ onSubmit, disabled = false }: Props){
+export function InputBar({ onSubmit, disabled = false, onCancel }: Props){
     const textareRef = useRef<TextareaRenderable>(null);
     const onSubmitRef = useRef<() => void>(() => {});
     const renderer =    useRenderer();
-
+    const toast = useToast();
+    const dialog = useDialog();
+    const { isTopLayer, setResponder}= useKeyboardLayer(); 
+    const {colors} = useTheme();
+    
     const {
         showCommandMenu,
         commandQuery,
@@ -68,14 +78,17 @@ export function InputBar({ onSubmit, disabled = false }: Props){
             void Promise.resolve(
                 command.action({
                     exit: () => renderer.destroy(),
+                    toast,
+                    dialog,
                 }),
-            ).catch((error) => {
-                console.error(`Command ${command.name} failed:`, error);
+            ).catch((error: unknown) => {
+                const reason = error instanceof Error ? error.message : String(error);
+                toast.show({ variant: "error", message: `${command.value} failed: ${reason}` });
             });
         } else {
             textarea.insertText(command.value + " ");
         }
-    }, [renderer]);
+    }, [renderer, toast, dialog]);
 
     const handleCommandExecute = useCallback(
         (index: number) => {
@@ -106,11 +119,32 @@ export function InputBar({ onSubmit, disabled = false }: Props){
         handleSubmit();
     }
 
+    // register the base layer responder for ctrl+c dismissal
+    useEffect(()=>{
+        setResponder("base", () => {
+            if(onCancel){
+                onCancel();
+                return true;
+            }
+            // Don't exit while input is disabled for work in progress.
+            if(disabled) return true;
+
+            const textarea = textareRef.current;
+            if(textarea && textarea.plainText.length>0){
+                textarea.setText("");
+                return true;
+            }
+            return false;
+        });
+
+        return ()=> setResponder("base", null);
+    },[disabled, onCancel, setResponder])
+
     return(
         <box width="100%" alignItems="center">
             <box
             border={["left"]}
-            borderColor="cyan"
+            borderColor={colors.primary}
             customBorderChars={{
                 ...EmptyBorder,
                 vertical: "|",
@@ -123,7 +157,7 @@ export function InputBar({ onSubmit, disabled = false }: Props){
                     justifyContent="center"
                     paddingX={2}
                     paddingY={1}
-                    backgroundColor="#1A1A24"
+                    backgroundColor={colors.surface}
                     width="100%"
                     gap={1}
                 >
@@ -133,7 +167,7 @@ export function InputBar({ onSubmit, disabled = false }: Props){
                             bottom="100%"
                             left={0}
                             width="100%"
-                            backgroundColor="#1A1A24"
+                            backgroundColor={colors.surface}
                             zIndex={10}
                         >
                             <CommandMenu
@@ -147,7 +181,7 @@ export function InputBar({ onSubmit, disabled = false }: Props){
                     )}
                     <textarea
                     ref={textareRef}
-                    focused={!disabled}
+                    focused={!disabled && (isTopLayer("base") || isTopLayer("command"))}
                     keyBindings={TEXTAREA_KEY_BINDINGS}
                     onContentChange={handleTextareaContentChange}
                     placeholder={`Ask anything... "Fix a bug in database"`}
