@@ -53,6 +53,7 @@ export const ThemeDialogContent=()=>{
         getKey={(t)=> t.name}
         placeholder="Search themes"
         emptyText="No matching themes"
+        initialIndex={Math.max(0, THEMES.findIndex((t) => t.name === originalThemeRef.current.name))}
         />
     );
 };
