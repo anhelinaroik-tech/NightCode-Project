@@ -15,6 +15,8 @@ import { useTheme } from "../providers/theme";
 type Props = {
     onSubmit: (text: string) => void;
     disabled?: boolean;
+    // Cancels the running response; while set, ctrl+c calls it instead of exiting.
+    onCancel?: () => void;
 };
 
 export const TEXTAREA_KEY_BINDINGS: KeyBinding [] = [
@@ -24,7 +26,7 @@ export const TEXTAREA_KEY_BINDINGS: KeyBinding [] = [
     { name: "enter", shift: true, action: "newline" },
 ]
 
-export function InputBar({ onSubmit, disabled = false }: Props){
+export function InputBar({ onSubmit, disabled = false, onCancel }: Props){
     const textareRef = useRef<TextareaRenderable>(null);
     const onSubmitRef = useRef<() => void>(() => {});
     const renderer =    useRenderer();
@@ -72,10 +74,16 @@ export function InputBar({ onSubmit, disabled = false }: Props){
         textarea.setText("");
 
         if(command.action){
-            command.action({
-                exit: () => renderer.destroy(),
-                toast,
-                dialog,
+            // Actions may be async; catch failures so they don't become unhandled rejections.
+            void Promise.resolve(
+                command.action({
+                    exit: () => renderer.destroy(),
+                    toast,
+                    dialog,
+                }),
+            ).catch((error: unknown) => {
+                const reason = error instanceof Error ? error.message : String(error);
+                toast.show({ variant: "error", message: `${command.value} failed: ${reason}` });
             });
         } else {
             textarea.insertText(command.value + " ");
@@ -114,7 +122,12 @@ export function InputBar({ onSubmit, disabled = false }: Props){
     // register the base layer responder for ctrl+c dismissal
     useEffect(()=>{
         setResponder("base", () => {
-            if(disabled) return false;
+            if(onCancel){
+                onCancel();
+                return true;
+            }
+            // Don't exit while input is disabled for work in progress.
+            if(disabled) return true;
 
             const textarea = textareRef.current;
             if(textarea && textarea.plainText.length>0){
@@ -125,7 +138,7 @@ export function InputBar({ onSubmit, disabled = false }: Props){
         });
 
         return ()=> setResponder("base", null);
-    },[disabled, setResponder])
+    },[disabled, onCancel, setResponder])
 
     return(
         <box width="100%" alignItems="center">

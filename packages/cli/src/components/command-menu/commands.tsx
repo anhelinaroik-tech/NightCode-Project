@@ -64,7 +64,7 @@ export const COMMANDS: Command[] = [
         description: "Sign out of your account",
         value: "/logout",
         action: (ctx)=>{
-            ctx.toast.show({variant: "success", message: "Sign out"});
+            ctx.toast.show({variant: "success", message: "Signed out"});
         },
     },
     {
