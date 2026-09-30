@@ -9,7 +9,7 @@ Built following [this video tutorial](https://www.youtube.com/watch?v=k_D_C3Exyp
 - [ ] Project Setup — in review
 - [ ] UI Infrastructure — in progress
 - [ ] Routing & Screen Layout
-- [ ] Server, Shared Package & Database
+- [ ] Server, Shared Package & Database — in review
 - [ ] Sentry Monitoring
 - [ ] AI Chat Streaming
 - [ ] Session Management
@@ -21,6 +21,7 @@ Built following [this video tutorial](https://www.youtube.com/watch?v=k_D_C3Exyp
 ## Requirements
 
 - [Bun](https://bun.sh) `>= 1.3.0`
+- A PostgreSQL database (a free [Neon](https://neon.tech) project works)
 - A terminal that supports TUI apps (run it in a real terminal, not a piped/CI shell)
 
 ## Setup
@@ -37,37 +38,59 @@ Copy the example configuration and fill in your own values (see [Configuration](
 cp .env.example .env
 ```
 
-## Run
+## Database
 
-From the repository root:
+Put your connection string into `DATABASE_URL` in the root `.env`, then generate the Prisma client and apply the migrations:
 
 ```bash
-bun run dev
+bun run --cwd packages/database db:generate   # generate the Prisma client (needed before typecheck/run)
+bun run --cwd packages/database db:deploy     # apply prisma/migrations to the database
 ```
 
-This starts `packages/cli/src/index.tsx` in watch mode, so the app restarts when you edit a file.
+While changing `schema.prisma`, use `bun run --cwd packages/database db:migrate` to create a new migration.
+
+## Run
+
+The CLI talks to the server, so start both, each in its own terminal, from the repository root:
+
+```bash
+bun run dev:server   # API server on http://localhost:3000 (hot reload)
+bun run dev:cli      # the TUI (watch mode)
+```
+
+Check that the server and database are up:
+
+```bash
+curl localhost:3000/health   # {"status":"ok","database":"up"}, or 503 if the database is down
+```
+
+If the database is unreachable at startup, the server prints `Cannot connect to <host>/<db>: <reason>` and exits with code 1.
 
 ## Checks
 
-Type-check the CLI package:
+Type-check every package:
 
 ```bash
-bun run --cwd packages/cli typecheck
+bun run typecheck
 ```
 
 ## Configuration
 
-Nothing reads environment variables yet — `.env` is reserved for later chapters. `.env.example` lists every variable with a placeholder value and is safe to commit. Your real `.env` is git-ignored — never commit it or put real secrets in `.env.example`.
+Environment variables are read from the root `.env` (copy it from `.env.example`). Your real `.env` is git-ignored — never commit it or put real secrets in `.env.example`.
+
+| Variable       | Used by | Description |
+| -------------- | ------- | ----------- |
+| `DATABASE_URL` | server, Prisma CLI | PostgreSQL connection string (required) |
+| `API_URL`      | CLI     | Server URL, defaults to `http://localhost:3000` |
 
 ## Project structure
 
+Bun workspace with four packages:
+
 ```
-packages/cli/src/
-├── index.tsx            # app entry point
-└── components/
-    ├── command-menu/    # slash-command menu (list, filtering, keyboard hook)
-    ├── header.tsx
-    ├── input-bar.tsx
-    ├── status-bar.tsx
-    └── border.tsx
+packages/
+├── cli/        # @nightcode/cli — the OpenTUI app; calls the server through a typed Hono client
+├── server/     # @nightcode/server — Hono API (/health, /sessions)
+├── shared/     # @nightcode/shared — models and Zod schemas used by both CLI and server
+└── database/   # @nightcode/database — Prisma schema, migrations and the db client
 ```
