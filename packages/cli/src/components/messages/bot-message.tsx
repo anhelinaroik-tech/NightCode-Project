@@ -11,7 +11,7 @@ export function BotMessage({content, model}: Props){
     return(
         <box width="100%" alignItems="center">
             <box paddingY={1} width="100%">
-                <box paddingX={2} width="100%">
+                <box paddingX={3} width="100%">
                     <text>{content}</text>
                 </box>
             </box>
