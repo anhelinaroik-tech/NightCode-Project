@@ -1,5 +1,5 @@
 import { 
-    createContext, useContext, useRef, useState, useCallback 
+    createContext, useContext, useRef, useState, useCallback, useEffect, useMemo 
 } from "react";
 import type { ReactNode } from "react";
 import { useTerminalDimensions } from "@opentui/react";
@@ -51,9 +51,9 @@ export function ToastProvider({children}: ToastProviderProps){
         }, duration).unref();
     }, [clearCurrentTimeout])
 
-    const value: ToastContextValue= {
-        show,
-    };
+    useEffect(() => clearCurrentTimeout, [clearCurrentTimeout]);
+
+    const value = useMemo<ToastContextValue>(() => ({ show }), [show]);
 
     return(
         <ToastContext.Provider value={value}>
@@ -88,6 +88,7 @@ function Toast({currentToast}: ToastProps){
     return(
         <box
             position="absolute"
+            zIndex={200}
             justifyContent="center"
             alignItems="flex-start"
             top={2}

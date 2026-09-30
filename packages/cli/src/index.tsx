@@ -31,11 +31,11 @@ function App() {
   return (
     <ThemeProvider>
       <KeyboardLayerProvider>
-        <DialogProvider>
-          <ToastProvider>
+        <ToastProvider>
+          <DialogProvider>
             <ThemeRoot />
-          </ToastProvider>
-        </DialogProvider>
+          </DialogProvider>
+        </ToastProvider>
       </KeyboardLayerProvider>
     </ThemeProvider>
   );
