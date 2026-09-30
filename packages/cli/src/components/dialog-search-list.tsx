@@ -19,6 +19,7 @@ type DialogSearchListProps<T> = {
   getKey: (item: T) => string;
   placeholder?: string;
   emptyText?: string;
+  initialIndex?: number;
 };
 
 export function DialogSearchList<T>({
@@ -30,8 +31,9 @@ export function DialogSearchList<T>({
   getKey,
   placeholder = "Search",
   emptyText = "No results",
+  initialIndex = 0,
 }: DialogSearchListProps<T>) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const [searchValue, setSearchValue] = useState("");
   const inputRef = useRef<InputRenderable>(null);
   const scrollRef = useRef<ScrollBoxRenderable>(null);
@@ -55,40 +57,44 @@ export function DialogSearchList<T>({
 
   const visibleHeight = Math.min(filtered.length, MAX_VISIBLE_ITEMS);
 
+  // Scrolling and onHighlight are side effects, so they run here rather than inside a setState updater.
+  const highlight = (newIndex: number) => {
+    setSelectedIndex(newIndex);
+    const item = filtered[newIndex];
+    if (item && onHighlight) onHighlight(item);
+  };
+
   useKeyboard((key) => {
     if (!isTopLayer("dialog")) return;
 
     if (key.name === "return" || key.name === "enter") {
+      key.preventDefault();
       const item = filtered[selectedIndex];
       if (item) {
         onSelect(item);
       }
     } else if (key.name === "up") {
-      setSelectedIndex((i) => {
-        const newIndex = Math.max(0, i - 1);
-        const sb = scrollRef.current;
-        if (sb && newIndex < sb.scrollTop) {
-          sb.scrollTo(newIndex);
-        }
-        const item = filtered[newIndex];
-        if (item && onHighlight) onHighlight(item);
-        return newIndex;
-      });
+      key.preventDefault();
+      if (filtered.length === 0) return;
+      const newIndex = Math.max(0, selectedIndex - 1);
+      const sb = scrollRef.current;
+      if (sb && newIndex < sb.scrollTop) {
+        sb.scrollTo(newIndex);
+      }
+      highlight(newIndex);
     } else if (key.name === "down") {
-      setSelectedIndex((i) => {
-        const newIndex = Math.min(filtered.length - 1, i + 1);
-        const sb = scrollRef.current;
-        if (sb) {
-          const viewportHeight = sb.viewport.height;
-          const visibleEnd = sb.scrollTop + viewportHeight - 1;
-          if (newIndex > visibleEnd) {
-            sb.scrollTo(newIndex - viewportHeight + 1);
-          }
+      key.preventDefault();
+      if (filtered.length === 0) return;
+      const newIndex = Math.min(filtered.length - 1, selectedIndex + 1);
+      const sb = scrollRef.current;
+      if (sb) {
+        const viewportHeight = sb.viewport.height;
+        const visibleEnd = sb.scrollTop + viewportHeight - 1;
+        if (newIndex > visibleEnd) {
+          sb.scrollTo(newIndex - viewportHeight + 1);
         }
-        const item = filtered[newIndex];
-        if (item && onHighlight) onHighlight(item);
-        return newIndex;
-      });
+      }
+      highlight(newIndex);
     }
   });
 
@@ -113,10 +119,7 @@ export function DialogSearchList<T>({
                 height={1}
                 overflow="hidden"
                 backgroundColor={isSelected ? colors.selection : undefined} 
-                onMouseMove={() => {
-                  setSelectedIndex(i);
-                  if (onHighlight) onHighlight(item);
-                }}
+                onMouseMove={() => highlight(i)}
                 onMouseDown={() => onSelect(item)}
               >
                 {renderItem(item, isSelected)}
