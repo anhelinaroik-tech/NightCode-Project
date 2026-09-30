@@ -1,7 +1,7 @@
 import {mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createContext, useContext, useState,useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 import type { ThemeColors, Theme } from "../../theme";
 import { DEFAULT_THEME, THEMES } from "../../theme";
@@ -73,8 +73,13 @@ export function ThemeProvider({children}: ThemeProviderProps){
         setCurrentTheme(theme);
     },[]);
 
+    const value = useMemo<ThemeContextValue>(
+        () => ({ colors: currentTheme.colors, currentTheme, setTheme, previewTheme }),
+        [currentTheme, setTheme, previewTheme],
+    );
+
     return (
-        <ThemeContext.Provider value={{colors: currentTheme.colors, currentTheme, setTheme, previewTheme}}>
+        <ThemeContext.Provider value={value}>
             {children}
         </ThemeContext.Provider>
     );

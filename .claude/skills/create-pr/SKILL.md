@@ -47,7 +47,7 @@ description: Automate creation of a GitHub Pull Request by fetching context from
      - <bullets from Step 4>
 
      ## Verification
-     - [x] `bun run --cwd packages/cli typecheck` passes
+     - [ ] `bun run --cwd packages/cli typecheck` passes   <!-- tick only if Step 3's typecheck passed; otherwise leave unticked and note the failure -->
      - [ ] `bun run dev` starts without errors (<result, or "not run: <reason>">)
      - [ ] <any other manual check, e.g. a dry run or real use of the change>
 
