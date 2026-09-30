@@ -3,7 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { streamText as aiStreamText } from "ai";
-import { db } from "@nightcode/database";
+import { db } from "@nightcode/database/client";
 import { Mode, MessageStatus } from "@nightcode/database/enums";
 import { type ChatStreamEvent } from "@nightcode/shared";
 import {isSupportedChatModel, resolveChatModel} from "../lib/models";
