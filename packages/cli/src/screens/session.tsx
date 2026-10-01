@@ -110,8 +110,6 @@ function SessionChat({ session }: { session: SessionData }) {
       loading={streaming.status === "streaming"}
       interruptible={streaming.status === "streaming"}
       onInterrupt={interrupt}
-      mode={mode}
-      model={model}
     >
       {messages.map((msg) => (
         <ChatMessage key={msg.id} msg={msg} />
