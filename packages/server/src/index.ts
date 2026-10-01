@@ -4,6 +4,7 @@ import { checkDatabaseConnection } from "@nightcode/database/client";
 import sessions from "./routes/sessions"
 import chat from "./routes/chat"
 import health from "./routes/health"
+import auth from "./routes/auth"
 import * as Sentry from "@sentry/hono/bun";
 
 const app = new Hono();
@@ -52,7 +53,8 @@ app.onError((error, c)=> {
 const routes = app
     .route("/health", health)
     .route("/sessions", sessions)
-    .route("/chat", chat);
+    .route("/chat", chat)
+    .route("/auth", auth);
 export type AppType = typeof routes;
 
 // Fail fast with a readable message instead of serving requests that will all fail
