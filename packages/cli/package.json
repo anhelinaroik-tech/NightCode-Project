@@ -19,6 +19,7 @@
     "@opentui/core": "^0.5.11",
     "@opentui/react": "^0.5.11",
     "@sentry/bun": "^11.1.0",
+    "date-fns": "^4.4.0",
     "eventsource-parser": "^4.1.1",
     "hono": "^4.13.11",
     "opentui-spinner": "^0.0.7",

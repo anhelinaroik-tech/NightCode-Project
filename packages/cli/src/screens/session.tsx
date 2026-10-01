@@ -10,14 +10,14 @@ import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
 import prettyMs from "pretty-ms";
 import {
-  DEFAULT_CHAT_MODEL_ID,
   type SupportedChatModel,
   type SupportedChatModelId,
 } from "@nightcode/shared";
 import { useChat } from "../hooks/use-chat";
 import type { Message, ClientMessagePart } from "../hooks/use-chat";
-import { MessageStatus, type Mode } from "@nightcode/database/enums";
+import { MessageStatus } from "@nightcode/database/enums";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
+import { usePromptConfig } from "../providers/prompt-config";
 
 type SessionData = InferResponseType<
   (typeof apiClient.sessions)[":id"]["$get"],
@@ -82,8 +82,7 @@ function SessionChat({ session }: { session: SessionData }) {
   const [initialMessages] = useState(() => mapDbMessages(session.messages));
   const { isTopLayer } = useKeyboardLayer();
   // Single source for what is sent to the server and shown in the status bar
-  const mode: Mode = "BUILD";
-  const model: SupportedChatModelId = DEFAULT_CHAT_MODEL_ID;
+  const { mode, model } = usePromptConfig();
   const { messages, streaming, submit, abort, interrupt } = useChat(
     session.id,
     initialMessages
@@ -110,8 +109,6 @@ function SessionChat({ session }: { session: SessionData }) {
       loading={streaming.status === "streaming"}
       interruptible={streaming.status === "streaming"}
       onInterrupt={interrupt}
-      mode={mode}
-      model={model}
     >
       {messages.map((msg) => (
         <ChatMessage key={msg.id} msg={msg} />
