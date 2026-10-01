@@ -74,6 +74,28 @@ Type-check every package:
 bun run typecheck
 ```
 
+## Tools and permissions
+
+The model can call tools that run **on the server**, inside the session's project directory (`cwd`). A session without a `cwd` gets no tools. Which tools are offered depends on the agent mode:
+
+| Tool            | What it can do | PLAN | BUILD |
+| --------------- | -------------- | :--: | :---: |
+| `readFile`      | Read a file (first 10,000 characters) | ✓ | ✓ |
+| `listDirectory` | List a directory, skipping hidden entries and `node_modules` | ✓ | ✓ |
+| `glob`          | Find files by pattern (up to 200 results) | ✓ | ✓ |
+| `grep`          | Search file contents by regex (up to 50 matches) | ✓ | ✓ |
+| `writeFile`     | Create or overwrite a file, creating parent directories | | ✓ |
+| `editFile`      | Replace one exact, unique string in a file | | ✓ |
+| `bash`          | Run any shell command in `cwd` (30 s default timeout, output truncated to 20,000 characters) | | ✓ |
+
+Boundaries:
+
+- Every tool input is validated against its Zod schema before it runs; invalid input is rejected without executing.
+- File tools resolve paths against `cwd` and refuse anything outside it.
+- Tool failures are returned to the model as `{ error }` results, so the conversation continues instead of crashing.
+- A single answer is capped at 50 tool-calling steps.
+- **`bash` is not sandboxed.** It runs with the server's user permissions and environment, so in BUILD mode the model can do anything that user can. Use PLAN mode for read-only work.
+
 ## Configuration
 
 Environment variables are read from the root `.env` (copy it from `.env.example`). Your real `.env` is git-ignored — never commit it or put real secrets in `.env.example`.

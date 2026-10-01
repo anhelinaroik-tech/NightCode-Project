@@ -8,9 +8,12 @@ import {useToast} from "../providers/toast";
 import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
 import { usePromptConfig } from "../providers/prompt-config";
+import { Mode } from "@nightcode/database/enums";
 
 const newSessionStateSchema = z.object({
   message: z.string(),
+  mode: z.enum(Mode),
+  model: z.string(),
 });
 
 export function NewSession() {
@@ -48,8 +51,8 @@ const state = useMemo(()=> {
             initialMessage: {
               role: "USER",
               content: state.message,
-              mode,
-              model,
+              mode: state.mode,
+              model: state.model,
             },
           }
         });
@@ -84,7 +87,7 @@ const state = useMemo(()=> {
 
   return (
     <SessionShell onSubmit={()=> {}} inputDisabled loading>
-      <UserMessage message={state.message}/>
+      <UserMessage message={state.message} mode={state.mode }/>
     </SessionShell>
   );
 };
