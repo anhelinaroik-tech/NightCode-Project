@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/bun";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -23,6 +24,12 @@ const router = createMemoryRouter([
 function App() {
   return <RouterProvider router={router}/>
 }
+
+// Initialised before the renderer so startup errors are captured too.
+// Without SENTRY_DSN the SDK stays disabled and the CLI runs normally.
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+});
 
 const renderer = await createCliRenderer({
   targetFps: 60,
