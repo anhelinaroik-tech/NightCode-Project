@@ -15,6 +15,7 @@ import {isSupportedChatModel, resolveChatModel} from "../lib/models";
 import {createTools} from "../tools";
 import { buildSystemPrompt } from "../system-prompt";
 import { Prisma } from "@nightcode/database";
+import type { AuthenticatedEnv } from "../middleware/require-auth";
 
 const submitSchema = z.object({
     content: z.string().trim().min(1, "Message cannot be empty"),
@@ -256,13 +257,14 @@ async function streamAIResponse(
     }
 };
 
-const app = new Hono()
+const app = new Hono<AuthenticatedEnv>()
 // get model's response of user message, which exist in database(not to post again next message, cause in this case its dublication, so better to take it from histiory and continue session)
     .post("/:sessionId/resume", async (c)=>{
         const sessionId = c.req.param("sessionId");
+        const userId = c.get("userId");
 
         const session = await db.session.findUnique({
-            where: {id: sessionId },
+            where: {id: sessionId, userId},
             include: {messages: {orderBy: {createdAt: "asc"}}},
         });
 
@@ -330,9 +332,10 @@ const app = new Hono()
     })
     .post("/:sessionId", submitValidator, async (c)=>{
         const sessionId = c.req.param("sessionId");
-        
+        const userId = c.get("userId");
+
         const session=await db.session.findUnique({
-            where:{id: sessionId},
+            where:{id: sessionId, userId},
             include: { messages:{orderBy:{createdAt:"asc"}}},
         });
 

@@ -4,8 +4,9 @@ import { checkDatabaseConnection } from "@nightcode/database/client";
 import sessions from "./routes/sessions"
 import chat from "./routes/chat"
 import health from "./routes/health"
+import auth from "./routes/auth"
 import * as Sentry from "@sentry/hono/bun";
-
+import { requireAuth } from "./middleware/require-auth";
 const app = new Hono();
 
 // Must be registered before any routes so every request is traced and errors reach Sentry.
@@ -48,11 +49,15 @@ app.onError((error, c)=> {
     return c.json({error: "Internal server error"}, 500);
 });
 
+app.use("/sessions/*", requireAuth);
+app.use("/chat/*", requireAuth);
+
 // registered to app all routes
 const routes = app
     .route("/health", health)
     .route("/sessions", sessions)
-    .route("/chat", chat);
+    .route("/chat", chat)
+    .route("/auth", auth);
 export type AppType = typeof routes;
 
 // Fail fast with a readable message instead of serving requests that will all fail
