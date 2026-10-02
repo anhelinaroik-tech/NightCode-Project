@@ -32,7 +32,7 @@ try{
     process.exit(1);
 }
 
-const port = 3000;
+const port = Number(process.env.PORT) || 3000;
 console.log(`[server] Listening on http://localhost:${port}`);
 
 // idleTimeout must be high, otherwise LLM tool calls might not complete
