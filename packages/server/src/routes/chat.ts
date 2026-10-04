@@ -16,6 +16,7 @@ import {isSupportedChatModel, resolveChatModel} from "../lib/models";
 import {createTools} from "../tools";
 import { buildSystemPrompt } from "../system-prompt";
 import { Prisma } from "@nightcode/database";
+import type { AuthenticatedEnv } from "../middleware/require-auth";
 import * as Sentry from "@sentry/hono/bun";
 
 const submitSchema = z.object({
@@ -330,13 +331,14 @@ function streamChat(
     }
 }
 
-const app = new Hono()
+const app = new Hono<AuthenticatedEnv>()
 // Stream a reply to the last user message that is already stored, instead of posting it again
     .post("/:sessionId/resume", async (c)=>{
         const sessionId = c.req.param("sessionId");
+        const userId = c.get("userId");
 
         const session = await db.session.findUnique({
-            where: {id: sessionId },
+            where: {id: sessionId, userId},
             include: {messages: {orderBy: {createdAt: "asc"}}},
         });
 
@@ -370,14 +372,24 @@ const app = new Hono()
     })
     .post("/:sessionId", submitValidator, async (c)=>{
         const sessionId = c.req.param("sessionId");
+        const userId = c.get("userId");
         const data = c.req.valid("json");
+
+        // Check ownership before claiming the stream slot, so a user can't abort someone else's stream
+        const ownedSession = await db.session.findUnique({
+            where: {id: sessionId, userId},
+            select: {id: true},
+        });
+        if(!ownedSession){
+            return c.json({error: "Session not found"}, 404);
+        }
 
         const { entry, previous } = claimStream(sessionId);
         try {
             await previous;
 
             const session=await db.session.findUnique({
-                where:{id: sessionId},
+                where:{id: sessionId, userId},
                 include: { messages:{orderBy:{createdAt:"asc"}}},
             });
 
