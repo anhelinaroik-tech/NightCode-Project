@@ -7,9 +7,7 @@ import { SessionShell } from "../components/session-shell";
 import {useToast} from "../providers/toast";
 import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
-import { usePromptConfig } from "../providers/prompt-config";
-import { Mode, modeSchema } from "@nightcode/shared";
-import { initializeContext } from "zod/v4/core";
+import { modeSchema } from "@nightcode/shared";
 
 const newSessionStateSchema = z.object({
   message: z.string(),
@@ -22,7 +20,6 @@ export function NewSession() {
   const location = useLocation();
   const toast = useToast(); 
   const hasStartedRef = useRef(false);
-  const { mode, model } = usePromptConfig();
 
 const state = useMemo(()=> {
   const parsed = newSessionStateSchema.safeParse(location.state);
@@ -75,7 +72,7 @@ const state = useMemo(()=> {
     return ()=>{
       ignore = true;
     }; 
-  }, [state, navigate, toast, mode, model]);
+  }, [state, navigate, toast]);
 
   if (!state) return null;
 

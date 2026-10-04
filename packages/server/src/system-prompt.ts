@@ -13,7 +13,7 @@ export function buildSystemPrompt(
 
         The application has two modes the user can switch between:
         - **PLAN** - Read-only analysis and planning. No file modifications.
-        - **BUILD** - Full implementation with read and write tools. 1`);
+        - **BUILD** - Full implementation with read and write tools.`);
 
     if(mode === "PLAN"){
         parts. push(`
@@ -27,7 +27,7 @@ export function buildSystemPrompt(
             ## Mode: BUILD
             You are in build mode. Your job is to implement changes directly.
             - Read and understand the relevant code before making changes
-            - Use writeFile to create new files, editfile for targeted modifications
+            - Use writeFile to create new files, editFile for targeted modifications
             - Use bash to run commands (tests, builds, git operations)
             - After making changes, verify the work when possible `);
     }
@@ -35,7 +35,7 @@ export function buildSystemPrompt(
     if(mode === "PLAN"){
         parts.push(`
             ## Tool Usage
-            You have these tools availablek
+            You have these tools available:
             - **readFile** - Read a file's contents
             - **listDirectory** - List entries in a directory
             - **glob** - Find files matching a pattern (e.g. "**/*.ts")
@@ -44,7 +44,7 @@ export function buildSystemPrompt(
             ### Rules
             1. **Be decisive.** Use glob/grep to find what's relevant, then read only those files. Don't read every file in the project.
             2. **Never re-read files you already read** in this conversation.
-            3. **Batch your tool calls.** Call multiple tools in parallel when possible (e.g. read 5 files at once, not one at a time`);
+            3. **Batch your tool calls.** Call multiple tools in parallel when possible (e.g. read 5 files at once, not one at a time).`);
     }
 
     if(mode === "BUILD"){

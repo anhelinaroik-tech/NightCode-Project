@@ -41,6 +41,11 @@ const polar = createPolar({
   environment: getPolarServer(),
 });
 
+// Behind a proxy the request URL can carry an internal scheme or host, so prefer the configured public origin
+function getReturnUrl(requestUrl: string) {
+  return new URL("/billing/success", process.env.PUBLIC_URL || requestUrl).toString();
+}
+
 type CreateCheckoutUrlParams = {
   customerExternalId: string;
   requestUrl: string;
@@ -52,7 +57,7 @@ export async function createCheckoutUrl({
 }: CreateCheckoutUrlParams) {
   const result = await polar.checkouts.create({
     products: [getPolarProductId()],
-    success_url: new URL("/billing/success", requestUrl).toString(),
+    success_url: getReturnUrl(requestUrl),
     external_customer_id: customerExternalId,
     metadata: { source: "nightcode-cli" },
   });
@@ -66,7 +71,7 @@ export async function createCustomerPortalUrl({
 }: CreateCheckoutUrlParams) {
   const result = await polar.customerSessions.create({
     external_customer_id: customerExternalId,
-    return_url: new URL("/billing/success", requestUrl).toString(),
+    return_url: getReturnUrl(requestUrl),
   });
 
   return result.customer_portal_url;
