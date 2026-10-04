@@ -28,7 +28,7 @@ function resolveAnthropicModel(modelId: AnthropicModelId): ResolvedModel{
     };
 };
 
-function resolvedOpenAIModel(modelId: OpenAIModelId): ResolvedModel{
+function resolveOpenAIModel(modelId: OpenAIModelId): ResolvedModel{
     return{
         model: openai(modelId),
         provider: "openai",
@@ -36,14 +36,14 @@ function resolvedOpenAIModel(modelId: OpenAIModelId): ResolvedModel{
     };
 };
 
-function resolveSoppurtedChatModel(model: SupportedChatModel): ResolvedModel{
+function resolveSupportedChatModel(model: SupportedChatModel): ResolvedModel{
     const provider= model.provider;
 
     switch (provider) {
         case "anthropic":
             return resolveAnthropicModel(model.id);
         case "openai":
-            return resolvedOpenAIModel(model.id);
+            return resolveOpenAIModel(model.id);
         default:
             return assertUnsupportedProvider(provider);
     }
@@ -58,7 +58,7 @@ export function resolveChatModel(modelId: string): ResolvedModel{
     if(!model){
         throw new Error(`Unsupported model: ${modelId}`);
      }
-     return resolveSoppurtedChatModel(model);
+     return resolveSupportedChatModel(model);
 };
 
 

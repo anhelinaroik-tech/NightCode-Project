@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
@@ -7,6 +8,7 @@ import { db } from "@nightcode/database/client";
 import { Mode, MessageStatus } from "@nightcode/database/enums";
 import { type ChatStreamEvent } from "@nightcode/shared";
 import {isSupportedChatModel, resolveChatModel} from "../lib/models";
+import * as Sentry from "@sentry/hono/bun";
 
 const submitSchema = z.object({
     content: z.string().trim().min(1, "Message cannot be empty"),
@@ -20,7 +22,37 @@ const submitValidator = zValidator("json", submitSchema, (result, c) => {
     }
 });
 
-const activeResumeSessionId = new Set<string>();
+type ActiveStream = {
+    abortController: AbortController;
+    finished: Promise<void>;
+    release: () => void;
+};
+
+// One stream per session, shared by submit and resume, so messages are persisted in order
+const activeStreams = new Map<string, ActiveStream>();
+
+// Takes the session's stream slot and aborts the previous holder.
+// Await `previous` before persisting anything, so its interrupted reply is stored first.
+function claimStream(sessionId: string) {
+    const previous = activeStreams.get(sessionId);
+    previous?.abortController.abort();
+
+    let resolveFinished!: () => void;
+    const finished = new Promise<void>((resolve) => {
+        resolveFinished = resolve;
+    });
+    const entry: ActiveStream = {
+        abortController: new AbortController(),
+        finished,
+        release: () => {
+            if (activeStreams.get(sessionId) === entry) activeStreams.delete(sessionId);
+            resolveFinished();
+        },
+    };
+    activeStreams.set(sessionId, entry);
+
+    return { entry, previous: previous?.finished ?? Promise.resolve() };
+}
 
 //conv history
 // Strip error messages and empty assistant messages from the conversation
@@ -68,9 +100,8 @@ async function streamAIResponse(
     const resolvedModel = resolveChatModel(model);
     let fullText = "";
 
+    // Always persist, so an empty interrupted reply is not auto-resumed on reopen
     const persistInterruptedMessage = async () => {
-        if (fullText.length===0)return;
-
         const elapsedMs = Date.now() - startTime;
 
         await db.message.create({
@@ -114,7 +145,7 @@ async function streamAIResponse(
 
         // thats how we know when streaming is finished
         const elapsedMs = Date.now() - startTime;
-        const assisntantMessage=await db.message.create({
+        const assistantMessage=await db.message.create({
             data: {
                 sessionId,
                 role: "ASSISTANT",
@@ -128,7 +159,7 @@ async function streamAIResponse(
 
         const doneEvent: ChatStreamEvent={
             type: "done",
-            messageId: assisntantMessage.id,
+            messageId: assistantMessage.id,
             durationMs: elapsedMs,
         };
 
@@ -139,26 +170,66 @@ async function streamAIResponse(
             return;
         }
 
+        Sentry.captureException(err);
         const message = err instanceof Error ? err.message : String(err);
 
-        await db.message.create({
-            data:{
-                sessionId,
-                role: "ERROR",
-                status: MessageStatus.COMPLETE,
-                model,
-                content: message,
-                mode,
-            },
-        }); 
+        // A failed save must not hide the model error from the client
+        try {
+            await db.message.create({
+                data:{
+                    sessionId,
+                    role: "ERROR",
+                    status: MessageStatus.COMPLETE,
+                    model,
+                    content: message,
+                    mode,
+                },
+            });
+        } catch (dbErr) {
+            Sentry.captureException(dbErr);
+        }
 
         const errorEvent: ChatStreamEvent = { type: "error", message};
         await stream.writeSSE({event: "error", data: JSON.stringify(errorEvent)});
     }
 };
 
+function streamChat(
+    c: Context,
+    entry: ActiveStream,
+    params: Omit<StreamParams, "abortController">,
+) {
+    const { abortController } = entry;
+    try {
+        return streamSSE(
+            c,
+            async (stream) => {
+                // Stop the model request when the client disconnects
+                stream.onAbort(() => {
+                    abortController.abort();
+                });
+
+                try {
+                    await streamAIResponse(stream, { ...params, abortController });
+                } finally {
+                    entry.release();
+                }
+            },
+            async (err, stream) => {
+                entry.release();
+                const message = err instanceof Error ? err.message : String(err);
+                const errorEvent: ChatStreamEvent = {type: "error", message};
+                await stream.writeSSE({event: "error", data: JSON.stringify(errorEvent)});
+            },
+        );
+    } catch (error) {
+        entry.release();
+        throw error;
+    }
+}
+
 const app = new Hono()
-// get model's response of user message, which exist in database(not to post again next message, cause in this case its dublication, so better to take it from histiory and continue session)
+// Stream a reply to the last user message that is already stored, instead of posting it again
     .post("/:sessionId/resume", async (c)=>{
         const sessionId = c.req.param("sessionId");
 
@@ -172,7 +243,6 @@ const app = new Hono()
         }
 
         const resumableMessage = getResumableUserMessage(session.messages);
-        ;
         if(!resumableMessage){
             return c.json({error: "Session has no pending user message to resume"}, 409);
         }
@@ -181,109 +251,68 @@ const app = new Hono()
             return c.json({error: `Session uses unsupported model: ${resumableMessage.model}`}, 409);
         }
 
-        if(activeResumeSessionId.has(sessionId)){
+        if(activeStreams.has(sessionId)){
             return c.json({
-                error: "Session already has an  active resume"
+                error: "Session already has an active stream"
             }, 409);
         }
 
-        activeResumeSessionId.add(sessionId);
-
-        const history = buildConversationHistory(session.messages);
-        const abortController = new AbortController();
-        try{
-        return streamSSE(
-            c, 
-            async (stream) => {
-                // зупиняє запит до AI-моделі, коли клієнт відключився від стріму
-                stream.onAbort(()=>{
-                    abortController.abort();
-                });
-
-                try {
-                await streamAIResponse(stream,{
-                    sessionId,
-                    model: resumableMessage.model,
-                    history,
-                    mode: resumableMessage.mode,
-                    abortController,
-                });
-                } finally {
-                    // lets delete it from our memory, so this resume has ended
-                    activeResumeSessionId.delete(sessionId);
-                }
-            },
-
-            async (err, stream) => {
-                activeResumeSessionId.delete(sessionId);
-                const message = err instanceof Error ? err.message : String(err);
-                const errorEvent: ChatStreamEvent = {type: "error", message};
-                await stream.writeSSE({
-                    event:"error", 
-                    data: JSON.stringify(errorEvent)
-                });
-            },
-        );}  catch (error) {
-            activeResumeSessionId.delete(sessionId);
-            throw error;
-        }
+        const { entry } = claimStream(sessionId);
+        return streamChat(c, entry, {
+            sessionId,
+            model: resumableMessage.model,
+            history: buildConversationHistory(session.messages),
+            mode: resumableMessage.mode,
+        });
     })
     .post("/:sessionId", submitValidator, async (c)=>{
         const sessionId = c.req.param("sessionId");
-        
-        const session=await db.session.findUnique({
-            where:{id: sessionId},
-            include: { messages:{orderBy:{createdAt:"asc"}}},
-        });
-
-        if(!session){
-            return c.json({error: "Session not found"}, 404);
-        }
-
         const data = c.req.valid("json");
 
-        await db.message.create({
-            data:{
-                sessionId,
-                role: "USER",
-                status: MessageStatus.COMPLETE,
-                model: data.model,
-                content: data.content,
-                mode: data.mode,
-            },
-        });
+        const { entry, previous } = claimStream(sessionId);
+        try {
+            await previous;
 
-        const history = buildConversationHistory([
-            ...session.messages, // todo limit to 5-10 messages
-            {
-                role: "USER" as const, 
-                content: data.content, 
-                status: MessageStatus.COMPLETE
-            },
-        ]);
+            const session=await db.session.findUnique({
+                where:{id: sessionId},
+                include: { messages:{orderBy:{createdAt:"asc"}}},
+            });
 
-        const abortController = new AbortController();
-        return streamSSE(
-            c,
-            async(stream) =>{
-                stream.onAbort(()=>{
-                    abortController.abort();
-                });
-
-                await streamAIResponse(stream, {
-                    sessionId,
-                    model: data.model,
-                    history,
-                    mode: data.mode,
-                    abortController,
-                });
-            },
-            async(err, stream) => {
-                const message = err instanceof Error ? err.message : String(err);
-                const errorEvent: ChatStreamEvent={type: "error", message};
-                await stream.writeSSE({event: "error", data: JSON.stringify(errorEvent)});
+            if(!session){
+                entry.release();
+                return c.json({error: "Session not found"}, 404);
             }
-        );
+
+            await db.message.create({
+                data:{
+                    sessionId,
+                    role: "USER",
+                    status: MessageStatus.COMPLETE,
+                    model: data.model,
+                    content: data.content,
+                    mode: data.mode,
+                },
+            });
+
+            const history = buildConversationHistory([
+                ...session.messages, // todo limit to 5-10 messages
+                {
+                    role: "USER" as const, 
+                    content: data.content, 
+                    status: MessageStatus.COMPLETE
+                },
+            ]);
+
+            return streamChat(c, entry, {
+                sessionId,
+                model: data.model,
+                history,
+                mode: data.mode,
+            });
+        } catch (error) {
+            entry.release();
+            throw error;
+        }
     });
 
     export default app;
