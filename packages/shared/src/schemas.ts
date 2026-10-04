@@ -40,7 +40,13 @@ export const toolInputSchemas = {
   bash: z.object({
     command: z.string().describe("Shell command to run"),
     description: z.string().optional().describe("Short description of the command"),
-    timeout: z.number().optional().describe("Timeout in milliseconds")
+    timeout: z
+      .number()
+      .int()
+      .positive()
+      .max(120_000)
+      .optional()
+      .describe("Timeout in milliseconds (default: 30000, max: 120000)")
   })
 } as const;
 

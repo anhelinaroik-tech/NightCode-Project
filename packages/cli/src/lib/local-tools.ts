@@ -1,5 +1,5 @@
-import { mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "path";
+import { mkdir, readFile, readdir, realpath, stat, writeFile } from "fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
 import { isReadOnlyTool, toolInputSchemas, Mode, type ModeType } from "@nightcode/shared";
 
 const MAX_FILE_SIZE = 10_000;
@@ -8,15 +8,33 @@ const MAX_MATCHES = 50;
 const MAX_OUTPUT = 20_000;
 const DEFAULT_TIMEOUT = 30_000;
 
-function resolveInsideCwd(path: string) {
-  const cwd = process.cwd();
-  // еретворює шлях на повний (абсолютний) шлях до файлу
-  // resolve("src/app.ts")
-  // → "/Users/elina/project/src/app.ts"
-  const resolved = resolve(cwd, path);
-  const rel = relative(cwd, resolved);
+function isInside(root: string, target: string) {
+  const rel = relative(root, target);
+  return !(rel.startsWith("..") || isAbsolute(rel));
+}
 
-  if (rel.startsWith("..") || isAbsolute(rel)) {
+// realpath that also works for paths that don't exist yet (e.g. a file about to be written)
+async function realpathAllowMissing(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (err) {
+    const parent = dirname(path);
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT" || parent === path) throw err;
+    return join(await realpathAllowMissing(parent), basename(path));
+  }
+}
+
+// Resolves a model-supplied path against the project directory and refuses anything outside it,
+// either lexically ("../x") or through a symlink inside the project ("link -> /etc").
+async function resolveInsideCwd(path: string) {
+  const cwd = process.cwd();
+  const resolved = resolve(cwd, path);
+  const [realCwd, realResolved] = await Promise.all([
+    realpath(cwd),
+    realpathAllowMissing(resolved),
+  ]);
+
+  if (!isInside(cwd, resolved) || !isInside(realCwd, realResolved)) {
     throw new Error("Path is outside the project directory");
   }
 
@@ -42,7 +60,7 @@ export async function executeLocalTool(
   switch (toolName) {
     case "readFile": {
       const { path } = toolInputSchemas.readFile.parse(input);
-      const { resolved } = resolveInsideCwd(path);
+      const { resolved } = await resolveInsideCwd(path);
       const content = await readFile(resolved, "utf-8");
       return content.length > MAX_FILE_SIZE
         ? {
@@ -53,8 +71,8 @@ export async function executeLocalTool(
         : { content };
     }
     case "listDirectory": {
-      const { path } = toolInputSchemas.readFile.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { path } = toolInputSchemas.listDirectory.parse(input);
+      const { cwd, resolved } = await resolveInsideCwd(path);
       const entries = await readdir(resolved);
       const results: { name: string; type: "file" | "directory" }[] = [];
 
@@ -78,7 +96,7 @@ export async function executeLocalTool(
     }
     case "glob": {
       const { pattern, path } = toolInputSchemas.glob.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = await resolveInsideCwd(path);
       const glob = new Bun.Glob(pattern);
       const files: string[] = [];
       let truncated = false;
@@ -102,7 +120,7 @@ export async function executeLocalTool(
     }
     case "grep": {
       const { pattern, path, include } = toolInputSchemas.grep.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = await resolveInsideCwd(path);
       const args = [
         "-rn",
         "--color=never",
@@ -155,7 +173,7 @@ export async function executeLocalTool(
     }
     case "writeFile": {
       const { content, path } = toolInputSchemas.writeFile.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = await resolveInsideCwd(path);
       await mkdir(dirname(resolved), { recursive: true });
       await writeFile(resolved, content, "utf-8");
       return {
@@ -166,7 +184,7 @@ export async function executeLocalTool(
     }
     case "editFile": {
       const { path, oldString, newString } = toolInputSchemas.editFile.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = await resolveInsideCwd(path);
       const content = await readFile(resolved, "utf-8");
       const occurrences = content.split(oldString).length - 1;
 
@@ -178,18 +196,27 @@ export async function executeLocalTool(
     }
     case "bash": {
       const { command, timeout = DEFAULT_TIMEOUT } = toolInputSchemas.bash.parse(input);
+      // Own process group, so the timeout can also kill background children (`cmd &`).
+      // Otherwise they keep stdout/stderr open and the reads below never finish.
       const proc = Bun.spawn(["bash", "-c", command], {
-        cwd: resolveInsideCwd(".").resolved,
+        cwd: process.cwd(),
         stdout: "pipe",
         stderr: "pipe",
         env: { ...process.env, TERM: "dumb" },
+        detached: true,
       });
-      const timer = setTimeout(() => proc.kill(), timeout);
-      const [stdout, stderr] = await Promise.all([
+      const timer = setTimeout(() => {
+        try {
+          process.kill(-proc.pid, "SIGKILL");
+        } catch {
+          // group already exited
+        }
+      }, timeout);
+      const [stdout, stderr, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
+        proc.exited,
       ]);
-      const exitCode = await proc.exited;
       clearTimeout(timer);
       return {
         stdout: truncate(stdout, MAX_OUTPUT),
