@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { TextAttributes } from "@opentui/core";
 import { format } from "date-fns";
 import { useLocation, useNavigate } from "react-router";
+import type { InferResponseType } from "hono/client";
 import { useDialog } from "../../providers/dialog";
 import { useToast } from "../../providers/toast";
 import {apiClient } from "../../lib/api-client";
@@ -9,11 +10,7 @@ import {getErrorMessage } from "../../lib/http-errors";
 import { DialogSearchList } from "../dialog-search-list";
 import { useTheme } from "../../providers/theme";
 
-type Session = {
-    id: string;
-    title: string;
-    createdAt: string;
-};
+type Session = InferResponseType<typeof apiClient.sessions.$get, 200>[number];
 
 export const SessionDialogContent = () => {
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -105,7 +102,7 @@ export const SessionDialogContent = () => {
     if(loading){
         return(
             <box flexDirection="column">
-                <text attributes={TextAttributes.DIM}>Loading session...</text>
+                <text attributes={TextAttributes.DIM}>Loading sessions...</text>
             </box>
         );
     }
