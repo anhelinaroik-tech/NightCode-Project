@@ -6,17 +6,19 @@ An AI coding agent for the terminal, inspired by Claude Code — built from scra
 
 Built following [this video tutorial](https://www.youtube.com/watch?v=k_D_C3ExypU), one chapter at a time. Each chapter is developed on its own branch and merged into `main` through a pull request.
 
-- [ ] Project Setup — in review
-- [ ] UI Infrastructure — in progress
-- [ ] Routing & Screen Layout
-- [ ] Server, Shared Package & Database — in review
-- [ ] Sentry Monitoring
-- [ ] AI Chat Streaming
-- [ ] Session Management
-- [ ] Tool Calling
-- [ ] Completing The User Experience
-- [ ] Usage Based Billing
-- [ ] Client-Side Tool Execution
+Merged chapters are ticked; final acceptance is still pending for all of them.
+
+- [x] Project Setup
+- [x] UI Infrastructure
+- [x] Routing & Screen Layout
+- [x] Server, Shared Package & Database
+- [x] Sentry Monitoring
+- [x] AI Chat Streaming
+- [x] Session Management
+- [x] Tool Calling
+- [x] Completing The User Experience
+- [ ] Usage Based Billing — in review
+- [ ] Client-Side Tool Execution — in review
 
 ## Requirements
 
@@ -74,6 +76,19 @@ Type-check every package:
 bun run typecheck
 ```
 
+## Using the CLI
+
+- **Log in first.** Every `/sessions` and `/chat` request needs a signed-in user. Run `/login`: it opens Clerk in your browser and stores the token in `~/.nightcode/auth.json` (readable only by you). `/logout` removes it.
+- Type a message and press Enter to start a session (Shift+Enter for a new line). `@` mentions a project file, `/` opens the command menu, Tab switches between BUILD and PLAN, Esc interrupts a reply.
+- `/sessions` lists your sessions: Enter opens one, `ctrl+d` twice deletes the highlighted one. Opening a session that no longer exists shows "Session not found. It may have been deleted." and returns to the home screen.
+- `/models` picks the model, `/theme` the color theme, `/upgrade` buys credits and `/usage` opens the billing portal (Polar sandbox), `/exit` quits. Ctrl+C does not quit.
+
+### Login setup (Clerk)
+
+1. Create a Clerk application and copy its publishable and secret keys into `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`.
+2. In Clerk, create an OAuth application (public client, PKCE) with the redirect URI `<API_URL>/auth/callback`, e.g. `http://localhost:3000/auth/callback`. Put its client ID into `CLERK_OAUTH_CLIENT_ID`.
+3. Put your Clerk Frontend API URL (e.g. `https://your-app.clerk.accounts.dev`) into `CLERK_FRONTEND_API`.
+
 ## Tools and permissions
 
 Tools run **on your machine, inside the CLI**, not on the server. The server only tells the model which tools exist (their names and input schemas, shared through `@nightcode/shared`). When the model calls a tool, the CLI runs it in the directory you started `nightcode` from and sends the result back, and the model continues its answer. Which tools are offered depends on the agent mode:
@@ -102,10 +117,35 @@ Boundaries:
 
 Environment variables are read from the root `.env` (copy it from `.env.example`). Your real `.env` is git-ignored — never commit it or put real secrets in `.env.example`.
 
-| Variable       | Used by | Description |
-| -------------- | ------- | ----------- |
-| `DATABASE_URL` | server, Prisma CLI | PostgreSQL connection string (required) |
-| `API_URL`      | CLI     | Server URL, defaults to `http://localhost:3000` |
+| Variable                 | Used by | Description |
+| ------------------------ | ------- | ----------- |
+| `DATABASE_URL`           | server, Prisma CLI | PostgreSQL connection string (required) |
+| `PORT`                   | server  | Port to listen on, defaults to `3000` |
+| `ANTHROPIC_API_KEY`      | server  | Key for the Claude models (required to chat with them) |
+| `OPENAI_API_KEY`         | server  | Key for the OpenAI models (required to chat with them) |
+| `CLERK_SECRET_KEY`       | server  | Clerk secret key (required, the server won't start without it) |
+| `CLERK_PUBLISHABLE_KEY`  | server  | Clerk publishable key (required) |
+| `CLERK_FRONTEND_API`     | CLI     | Clerk Frontend API URL, used by `/login` |
+| `CLERK_OAUTH_CLIENT_ID`  | CLI     | Client ID of the Clerk OAuth application, used by `/login` |
+| `POLAR_ACCESS_TOKEN`     | server  | Polar organization access token (required, the server won't start without it) |
+| `POLAR_PRODUCT_ID`       | server  | Polar product that sells credits, used by `/upgrade` |
+| `POLAR_CREDITS_METER_ID` | server  | Polar meter that tracks credits |
+| `POLAR_SERVER`           | server  | `sandbox` (default) or `production`; keep `sandbox` for development |
+| `SENTRY_DSN`             | CLI, server | Sentry DSN; leave empty to disable error reporting |
+| `API_URL`                | CLI     | Server URL, defaults to `http://localhost:3000` |
+
+Both the CLI and the server read the same root `.env`.
+
+## Known limitations
+
+- **`bash` is not sandboxed.** Once you approve a command, it runs with your user's permissions and environment variables.
+- Read-only tools run without asking and can read any file in the project directory, including secrets such as `.env`; the content is sent to the model provider.
+- Tools work in the directory the CLI was started from; there is no per-session project directory.
+- The server does not start without the Clerk and Polar variables, even for `/health`.
+- Billing uses the Polar sandbox, so no real payments are possible; usage is only recorded in Polar, not in the database.
+- Deleting a session cannot be undone.
+- Sessions store their whole message history as one JSON column, so very long sessions make every save larger.
+- There are no automated tests; `bun run typecheck` is the only check.
 
 ## Project structure
 
@@ -114,7 +154,7 @@ Bun workspace with four packages:
 ```
 packages/
 ├── cli/        # @nightcode/cli — the OpenTUI app; calls the server through a typed Hono client
-├── server/     # @nightcode/server — Hono API (/health, /sessions, /chat)
+├── server/     # @nightcode/server — Hono API (/health, /sessions, /chat, /auth, /billing)
 ├── shared/     # @nightcode/shared — models and Zod schemas used by both CLI and server
 └── database/   # @nightcode/database — Prisma schema, migrations and the db client
 ```
