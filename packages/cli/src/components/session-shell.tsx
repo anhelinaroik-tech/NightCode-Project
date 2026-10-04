@@ -2,8 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
 import { InputBar } from "./input-bar";
 import { Spinner } from "./spinner";
-import type { SupportedChatModelId } from "@nightcode/shared";
-import type { Mode } from "@nightcode/database/enums";
+import { usePromptConfig } from "../providers/prompt-config";
 
 type Props = {
   children?: ReactNode;
@@ -12,8 +11,6 @@ type Props = {
   loading?: boolean;
   interruptible?: boolean;
   onInterrupt?: () => void;
-  mode?: Mode;
-  model?: SupportedChatModelId;
 };
 
 export function SessionShell({
@@ -23,9 +20,9 @@ export function SessionShell({
     loading = false,
     interruptible = false,
     onInterrupt,
-    mode,
-    model,
 }: Props){
+
+    const {mode} = usePromptConfig();
     return(
         <box
         flexDirection="column"
@@ -43,8 +40,6 @@ export function SessionShell({
                 <InputBar
                 onSubmit={onSubmit}
                 disabled={inputDisabled}
-                mode={mode}
-                model={model}
                 onCancel={interruptible ? onInterrupt : undefined}
                 />
             </box>
@@ -59,7 +54,7 @@ export function SessionShell({
                 <box flexDirection="row" alignItems="center" gap={2}>
                     {loading ? (
                         <>
-                        <Spinner />
+                        <Spinner mode={mode}/>
                         {interruptible ? <text>esc to interrupt</text> : null}
                         </>
                     ): null}

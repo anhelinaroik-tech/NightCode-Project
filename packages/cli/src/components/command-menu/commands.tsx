@@ -1,4 +1,10 @@
-import { ThemeDialogContent } from "../dialogs/theme-dialog";
+import { SUPPORTED_CHAT_MODELS } from "@nightcode/shared";
+import { 
+    SessionDialogContent, 
+    ThemeDialogContent,
+    AgentsDialogContent,
+    ModelsDialogContent,
+ } from "../dialogs";
 import type { Command } from "./types";
 
 export const COMMANDS: Command[] = [
@@ -7,7 +13,7 @@ export const COMMANDS: Command[] = [
         description: "Start a new conversation",
         value: "/new",
         action: (ctx)=>{
-            ctx.toast.show({message: "Starting new conversation..."});
+            ctx.navigate("/");
         },
     },
     {
@@ -16,9 +22,9 @@ export const COMMANDS: Command[] = [
         value: "/agents",
         action: (ctx)=>{
             ctx.dialog.open({
-                title: "Select Mode",
-                children: <text>Agent selection coming soon...</text>
-            });
+                title: "Select Agent",
+                children: <AgentsDialogContent currentMode={ctx.mode} onSelectMode={ctx.setMode}/> ,
+            })
         },
     },
     {
@@ -27,9 +33,14 @@ export const COMMANDS: Command[] = [
         value: "/models",
         action: (ctx)=>{
             ctx.dialog.open({
-                title:"Select Model",
-                children: <text>Model selection coming soon...</text>
-            });
+                title: "Select Model",
+                children: (
+                    <ModelsDialogContent
+                        models={SUPPORTED_CHAT_MODELS.map((model)=> model.id)}
+                        onSelectModel={ctx.setModel}
+                    />
+                ),
+            })
         },
     },
     {
@@ -37,7 +48,10 @@ export const COMMANDS: Command[] = [
         description: "Browse past sessions",
         value: "/sessions",
         action: (ctx)=>{
-            ctx.toast.show({message: "Loading session..."});
+            ctx.dialog.open({
+                title: "Sessions",
+                children: <SessionDialogContent/> ,
+            })
         },
     },
     {
