@@ -10,7 +10,19 @@ chatStreamEventSchema,
 type SupportedChatModelId
 } from "@nightcode/shared";
 
-export type ClientMessagePart = { type: "text"; text: string};
+export type ClientToolCallPart = {
+    type: "tool-calling",
+    id: string,
+    name: string,
+    args: Record<string, unknown>,
+    result?: string,
+    status: "calling" | "done",
+}
+
+export type ClientMessagePart = 
+    | {type: "reasoning"; text: string}
+    | ClientToolCallPart
+    |{ type: "text"; text: string};
 
 export type Message=
     | { 
@@ -190,6 +202,38 @@ export function useChat(
             }
 
             switch(event.type){
+                case "reasoning-delta":{
+                    const last = parts[parts.length-1];
+                    if (last && last.type==="reasoning"){
+                        parts[parts.length - 1] = { ...last, text: last.text + event.text };
+                    }else {
+                        parts.push({type:"reasoning", text: event.text});
+                    }
+                    emitParts(activeStream.requestId, parts);
+                    break; 
+                }
+                case "tool-call": {
+                    parts.push({
+                        type: "tool-calling",
+                        id: event.toolCallId,
+                        name: event.toolName,
+                        args: event.args,
+                        status: "calling"
+                    });
+                    emitParts(activeStream.requestId, parts);
+                    break;
+                }
+                case "tool-result": {
+                    const index = parts.findIndex(
+                        (p) => p.type === "tool-calling" && p.id === event.toolCallId,
+                    );
+                    const tc = parts[index];
+                    if (tc?.type === "tool-calling") {
+                        parts[index] = { ...tc, result: event.result, status: "done" };
+                    }
+                    emitParts(activeStream.requestId, parts);
+                    break;
+                }
                 case "text-delta":{
                     const last = parts[parts.length-1];
                     if(last && last.type === "text"){
