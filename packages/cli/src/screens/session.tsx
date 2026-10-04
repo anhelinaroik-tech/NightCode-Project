@@ -10,7 +10,6 @@ import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
 import prettyMs from "pretty-ms";
 import {
-  type SupportedChatModel,
   type SupportedChatModelId,
 } from "@nightcode/shared";
 import { useChat } from "../hooks/use-chat";
@@ -72,7 +71,6 @@ function ChatMessage({ msg }: { msg: Message }) {
       model={msg.model}
       mode={msg.mode}
       duration={msg.duration}
-      streaming={false}
       interrupted={msg.interrupted}
     />
   );
@@ -118,7 +116,6 @@ function SessionChat({ session }: { session: SessionData }) {
           parts={streaming.parts}
           model={streaming.model}
           mode={streaming.mode}
-          streaming
         />
       )}
     </SessionShell>

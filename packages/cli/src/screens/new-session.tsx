@@ -19,6 +19,9 @@ export function NewSession() {
   const toast = useToast(); 
   const hasStartedRef = useRef(false);
   const { mode, model } = usePromptConfig();
+  // Read through a ref so a mode/model change can't re-run the effect and drop the in-flight navigation
+  const promptConfigRef = useRef({ mode, model });
+  promptConfigRef.current = { mode, model };
 
 const state = useMemo(()=> {
   const parsed = newSessionStateSchema.safeParse(location.state);
@@ -37,6 +40,7 @@ const state = useMemo(()=> {
     if(!state || hasStartedRef.current) return;
 
     hasStartedRef.current = true;
+    const { mode, model } = promptConfigRef.current;
 
     let ignore = false;
     const createSession = async ()=>{
@@ -61,7 +65,7 @@ const state = useMemo(()=> {
         const session = await res.json();
         navigate(
           `/sessions/${session.id}`,
-          // state: { session } передає вже створений об'єкт сесії на наступний екран (/sessions/:id) через історію роутера, щоб його не треба було завантажувати з сервера ще раз.
+          // Pass the created session via router state so the next screen doesn't refetch it
           {replace: true, state:{session}}
         );
       } catch (error){
@@ -78,7 +82,7 @@ const state = useMemo(()=> {
     return ()=>{
       ignore = true;
     }; 
-  }, [state, navigate, toast, mode, model]);
+  }, [state, navigate, toast]);
 
   if (!state) return null;
 
