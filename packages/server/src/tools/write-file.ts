@@ -1,7 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { resolve, relative, isAbsolute, dirname } from "path";
+import { dirname, relative } from "path";
 import { writeFile, mkdir } from "fs/promises";
+import { resolveProjectPath } from "./project-path";
 
 export function createWriteFileTool(cwd: string) {
     return tool({
@@ -12,9 +13,8 @@ export function createWriteFileTool(cwd: string) {
             content: z.string().describe("The full content to write to the file"),
         }),
         execute: async ({ path, content }) => {
-            const resolved = resolve(cwd, path);
-            const rel = relative(cwd, resolved);
-            if (rel.startsWith("..") || isAbsolute(rel)) {
+            const resolved = await resolveProjectPath(cwd, path);
+            if (!resolved) {
                 return { error: "Path is outside the project directory" };
             }
 
@@ -24,7 +24,7 @@ export function createWriteFileTool(cwd: string) {
 
                 return {
                     success: true as const,
-                    path: rel,
+                    path: relative(cwd, resolved),
                     bytesWritten: Buffer.byteLength(content, "utf-8"),
                 };
             } catch (err) {

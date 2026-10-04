@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { resolve, relative, isAbsolute, join } from "path";
+import { resolve, relative } from "path";
+import { resolveProjectPath } from "./project-path";
 
 const MAX_RESULTS = 200;
 
@@ -16,9 +17,8 @@ export function createGlobTool(cwd: string) {
                 .default("."),
         }),
         execute: async ({ pattern, path }) => {
-            const resolved = resolve(cwd, path);
-
-            if (!resolved.startsWith(cwd)){
+            const resolved = await resolveProjectPath(cwd, path);
+            if (!resolved) {
                 return {error: "Path is outside the project directory"};
             }
 

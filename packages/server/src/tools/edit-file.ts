@@ -1,7 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { resolve, relative, isAbsolute } from "path";
+import { relative } from "path";
 import { readFile, writeFile } from "fs/promises";
+import { resolveProjectPath } from "./project-path";
 
 export function createEditFileTool(cwd: string) {
     return tool({
@@ -15,9 +16,8 @@ export function createEditFileTool(cwd: string) {
             newString: z.string().describe("The text to replace it with"),
         }),
         execute: async ({ path, oldString, newString }) => {
-            const resolved = resolve(cwd, path);
-            const rel = relative(cwd, resolved);
-            if (rel.startsWith("..") || isAbsolute(rel)) {
+            const resolved = await resolveProjectPath(cwd, path);
+            if (!resolved) {
                 return { error: "Path is outside the project directory" };
             }
 

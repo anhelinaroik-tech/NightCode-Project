@@ -8,8 +8,7 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/index.ts --outdir dist --target bun",
-    "postinstall": "bun run --cwd ../database db:generate"
+    "build": "bun build src/index.ts --outdir dist --target bun"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.69",
@@ -19,7 +18,6 @@
     "@hono/zod-validator": "^0.9.1",
     "@nightcode/database": "workspace:*",
     "@nightcode/shared": "workspace:*",
-    "@polar-sh/sdk": "^1.0.2",
     "@sentry/bun": "^11.1.0",
     "@sentry/hono": "^11.1.0",
     "ai": "^7.0.123",

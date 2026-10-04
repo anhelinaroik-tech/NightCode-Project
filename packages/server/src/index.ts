@@ -16,18 +16,21 @@ const app = new Hono();
 app.use(
     Sentry.sentry(app, {
         dsn: process.env.SENTRY_DSN,
-        tracesSampleRate: 1.0,
+        tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
     }),
 );
 
-app.get("/debug-sentry", () => {
-    // Send a log and a metric before throwing the error
-    Sentry.logger.info("User triggered test error", {
-        action: "test_error_endpoint",
+// Unauthenticated and always throws, so keep it out of production
+if (process.env.NODE_ENV !== "production") {
+    app.get("/debug-sentry", () => {
+        // Send a log and a metric before throwing the error
+        Sentry.logger.info("User triggered test error", {
+            action: "test_error_endpoint",
+        });
+        Sentry.metrics.count("test_counter", 1);
+        throw new Error("My first Sentry error!");
     });
-    Sentry.metrics.count("test_counter", 1);
-    throw new Error("My first Sentry error!");
-});
+}
 
 app.onError((error, c)=> {
     if(error instanceof HTTPException){
@@ -76,7 +79,7 @@ try{
     process.exit(1);
 }
 
-const port = 3000;
+const port = Number(process.env.PORT) || 3000;
 console.log(`[server] Listening on http://localhost:${port}`);
 
 // idleTimeout must be high, otherwise LLM tool calls might not complete

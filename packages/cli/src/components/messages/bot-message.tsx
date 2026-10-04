@@ -12,7 +12,6 @@ type Props = {
   model: string;
   mode: Mode;
   duration?: string;
-  streaming?: boolean;
   interrupted?: boolean;
 };
 
@@ -57,7 +56,6 @@ export function BotMessage({
   model,
   mode,
   duration,
-  streaming = false,
   interrupted = false,
 }: Props) {
   const { colors } = useTheme();

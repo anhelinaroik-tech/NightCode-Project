@@ -21,8 +21,11 @@ import { readdir } from "node:fs/promises";
 const MAX_VISIBLE_MENTIONS = 8;
 const CURRENT_DIRECTORY = process.cwd();
 const MAX_FALLBACK_MENTION_CANDIDATES = 32;
+// Bounds for the recursive fallback search, so a keystroke can't trigger a full scan of a large repo
+const MAX_FALLBACK_MENTION_DEPTH = 6;
+const MAX_FALLBACK_MENTION_VISITED = 5_000;
 const MENTION_QUERY_CHARACTER = /[A-Za-z0-9._/-]/;
-const RECURSIVE_MENTION_IGNORED_DIRECTORIES = new Set(["node_modules"]);
+const RECURSIVE_MENTION_IGNORED_DIRECTORIES = new Set(["node_modules", "dist", "build", "target", "coverage"]);
 
 type MentionMatch = {
   start: number;
@@ -89,7 +92,7 @@ function findActiveMention(text: string, cursorOffset: number): MentionMatch | n
 }
 
 
-async function getMentionCandidates(query: string): Promise<MentionCandidate[]>{
+async function getMentionCandidates(query: string, signal: AbortSignal): Promise<MentionCandidate[]>{
   const normalizeQuery = query.startsWith("./") ? query.slice(2) : query;
   if(normalizeQuery.startsWith("/")){
     return [];
@@ -148,13 +151,24 @@ async function getMentionCandidates(query: string): Promise<MentionCandidate[]>{
       }
 
       const fallbackMatches: MentionCandidate[] = [];
+      let visitedEntries = 0;
+      const shouldStop = () =>
+        signal.aborted ||
+        fallbackMatches.length >= MAX_FALLBACK_MENTION_CANDIDATES ||
+        visitedEntries >= MAX_FALLBACK_MENTION_VISITED;
+
       const visit = async(
         absoluteDirectory: string, 
-        directoryPart: string
+        directoryPart: string,
+        depth: number,
       ): Promise<void> => {
+        if(shouldStop()) return;
         const entries = await readdir(absoluteDirectory, {withFileTypes: true});
 
         for(const entry of entries){
+          if(shouldStop()) return;
+          visitedEntries += 1;
+
           if(!showHiddenEntries && entry.name.startsWith(".")){
             continue;
           }
@@ -177,8 +191,8 @@ async function getMentionCandidates(query: string): Promise<MentionCandidate[]>{
             }
           }
 
-          if(entry.isDirectory()){
-            await visit(resolve(absoluteDirectory, entry.name), path);
+          if(entry.isDirectory() && depth < MAX_FALLBACK_MENTION_DEPTH){
+            await visit(resolve(absoluteDirectory, entry.name), path, depth + 1);
             if(fallbackMatches.length >= MAX_FALLBACK_MENTION_CANDIDATES){
               return;
             }
@@ -186,7 +200,7 @@ async function getMentionCandidates(query: string): Promise<MentionCandidate[]>{
         }
       };
 
-      await visit(CURRENT_DIRECTORY, "");
+      await visit(CURRENT_DIRECTORY, "", 0);
       return fallbackMatches.sort((left, right) => left.path.localeCompare(right.path));
   } catch {
     return [];
@@ -364,9 +378,10 @@ export function InputBar({ onSubmit, disabled = false, onCancel }: Props) {
 
       if( !textarea || !mention || !candidate) return;
 
+      // Files get a trailing space so the menu closes; directories stay open for drilling down
       const insertion = candidate.kind === "directory" 
       ? candidate.path 
-      :`${candidate.path}`;
+      :`${candidate.path} `;
 
       const nextText = `${textarea.plainText.slice(0, mention.start)}@${insertion}${textarea.plainText.slice(mention.end)}`;
 
@@ -425,16 +440,19 @@ export function InputBar({ onSubmit, disabled = false, onCancel }: Props) {
     [resolveCommand, handleCommand]
   );
 
+  // Keyed on the query, so cursor moves inside the same mention don't restart the search
+  const mentionQuery = activeMention?.query ?? null;
   useEffect(()=> {
-    if(!activeMention){
+    if(mentionQuery === null){
       setMentionCandidates([]);
       return;
     }
 
-     let ignore = false;
+     // Cancels the in-flight directory walk when the query changes or the menu closes
+     const controller = new AbortController();
      const loadCandidates = async () => {
-      const nexCandidates = await getMentionCandidates(activeMention.query);
-      if(ignore) return;
+      const nexCandidates = await getMentionCandidates(mentionQuery, controller.signal);
+      if(controller.signal.aborted) return;
 
       setMentionCandidates(nexCandidates);
       setMentionSelectedIndex((currentIndex)=> {
@@ -448,9 +466,9 @@ export function InputBar({ onSubmit, disabled = false, onCancel }: Props) {
      void loadCandidates();
 
      return () =>{
-      ignore = true;
+      controller.abort();
      };
-  }, [activeMention]);
+  }, [mentionQuery]);
 
   useEffect(() => {
     const textarea = textareRef.current;
@@ -612,6 +630,7 @@ export function InputBar({ onSubmit, disabled = false, onCancel }: Props) {
             focused={!disabled && (isTopLayer("base") || isTopLayer("command") || isTopLayer("mention"))}
             keyBindings={TEXTAREA_KEY_BINDINGS}
             onContentChange={handleTextareaContentChange}
+            onCursorChange={handleTextareaCursorChange}
             placeholder={`Ask anything... "Fix a bug in database"`}
           />
           <StatusBar />
