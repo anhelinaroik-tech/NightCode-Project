@@ -13,7 +13,7 @@ import { useDialog } from "../providers/dialog";
 import { useTheme } from "../providers/theme";
 import { useNavigate } from "react-router";
 import { usePromptConfig } from "../providers/prompt-config";
-import { Mode } from "@nightcode/database/enums";
+import { Mode } from "@nightcode/shared";
 import {isAbsolute, relative, resolve} from "node:path"
 import { TextAttributes } from "@opentui/core";
 import { readdir } from "node:fs/promises";

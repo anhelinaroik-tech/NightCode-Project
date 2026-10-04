@@ -8,11 +8,12 @@ import {useToast} from "../providers/toast";
 import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
 import { usePromptConfig } from "../providers/prompt-config";
-import { Mode } from "@nightcode/database/enums";
+import { Mode, modeSchema } from "@nightcode/shared";
+import { initializeContext } from "zod/v4/core";
 
 const newSessionStateSchema = z.object({
   message: z.string(),
-  mode: z.enum(Mode),
+  mode: modeSchema,
   model: z.string(),
 });
 
@@ -47,13 +48,6 @@ const state = useMemo(()=> {
         const res = await apiClient.sessions.$post({
           json:{
             title: state.message.slice(0,100),
-            cwd: process.cwd(),
-            initialMessage: {
-              role: "USER",
-              content: state.message,
-              mode: state.mode,
-              model: state.model,
-            },
           }
         });
 
@@ -65,7 +59,7 @@ const state = useMemo(()=> {
         navigate(
           `/sessions/${session.id}`,
           // state: { session } передає вже створений об'єкт сесії на наступний екран (/sessions/:id) через історію роутера, щоб його не треба було завантажувати з сервера ще раз.
-          {replace: true, state:{session}}
+          {replace: true, state:{session, initialPrompt: state}}
         );
       } catch (error){
         if (ignore) return;
