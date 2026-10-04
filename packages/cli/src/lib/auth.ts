@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, mkdir } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -24,7 +24,10 @@ export function saveAuth(data: AuthData) {
         // owner-only permission
         mkdirSync(AUTH_DIR, {mode: 0o700});
     }
+    // mode only applies on creation (and is masked by umask), so enforce it for existing paths too
+    chmodSync(AUTH_DIR, 0o700);
     writeFileSync(AUTH_FILE, JSON.stringify(data), {mode: 0o600});
+    chmodSync(AUTH_FILE, 0o600);
 }
 
 export function clearAuth(){

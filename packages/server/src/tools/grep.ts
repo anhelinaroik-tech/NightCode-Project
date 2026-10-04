@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { resolve, relative, isAbsolute } from "path";
+import { relative } from "path";
+import { resolveProjectPath } from "./project-path";
 
 const MAX_MATCHES = 50;
 const MAX_LINE_LENGTH = 500;
@@ -21,9 +22,8 @@ export function createGrepTool(cwd: string) {
                 .optional(),
         }),
         execute: async ({ pattern, path, include }) => {
-            const resolved = resolve(cwd, path);
-            const rel = relative(cwd, resolved);
-            if (rel.startsWith("..") || isAbsolute(rel)) {
+            const resolved = await resolveProjectPath(cwd, path);
+            if (!resolved) {
                 return { error: "Path is outside the project directory" };
             }
 

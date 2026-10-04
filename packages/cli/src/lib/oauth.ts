@@ -49,10 +49,13 @@ export async function performLogin() {
   const codeChallenge = await createPkceChallenge(codeVerifier);
 
   let settled = false;
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
   return new Promise<{ token: string }>((resolve, reject) => {
     const server = Bun.serve({
       port: 0,
+      // Loopback only; the server redirects to 127.0.0.1 as well
+      hostname: "127.0.0.1",
       async fetch(req) {
         const url = new URL(req.url);
 
@@ -60,11 +63,15 @@ export async function performLogin() {
           return new Response("Not found", { status: 404 });
         }
 
+        // The server lingers briefly after login finishes; ignore late or repeated callbacks
+        if (settled) {
+          return new Response("Login already completed", { status: 409 });
+        }
+
         const error = url.searchParams.get("error");
 
         if (error) {
           const msg = url.searchParams.get("error_description") ?? error;
-          // прапорець «вхід уже завершився»
           settled = true;
           reject(new Error(msg));
           setTimeout(() => server.stop(), 500);
@@ -114,11 +121,16 @@ export async function performLogin() {
             throw new Error(details || "Failed to exchange authorization code");
           }
 
-          const tokenData = (await tokenRes.json()) as { access_token: string };
+          const tokenData = (await tokenRes.json()) as { access_token?: unknown };
+          if (typeof tokenData.access_token !== "string" || !tokenData.access_token) {
+            throw new Error("Token response missing access_token");
+          }
+          const token = tokenData.access_token;
 
           settled = true;
-          saveAuth({ token: tokenData.access_token });
-          resolve({ token: tokenData.access_token });
+          clearTimeout(timeoutTimer);
+          saveAuth({ token });
+          resolve({ token });
           setTimeout(() => server.stop(), 500);
           return new Response("Authenticated! You can close this tab.");
         } catch (err) {
@@ -154,7 +166,7 @@ export async function performLogin() {
 
     void open(authorizeUrl.toString());
 
-    setTimeout(() => {
+    timeoutTimer = setTimeout(() => {
       if (!settled) {
         settled = true;
         server.stop();

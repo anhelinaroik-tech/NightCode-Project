@@ -87,11 +87,8 @@ export function useChat(
         status: "idle"
     });
     const activeStreamRef = useRef<ActiveStream | null>(null);
-    const updateMessages = useCallback((updater: (prev: Message[]) => Message[])=>{
-        setMessages((prev)=> updater(prev));
-    }, []);
 
-    // захищає від застарілих (stale) стрімів. Вона перевіряє, чи запит, від якого прийшла подія, досі є поточним активним стрімом.
+    // Ignore events from stale streams that are no longer the active request
     const isActiveRequest = useCallback((requestId: string) => {
         return activeStreamRef.current?.requestId === requestId;
     }, []);
@@ -102,7 +99,7 @@ export function useChat(
     )=>{
         if(!isActiveRequest(requestId)) return;
 
-        // snapshot фіксує поточний вміст масиву в конкретний момент. Для React це новий об'єкт, а мутабельний буфер у ref можна й далі спокійно доповнювати.Одне зауваження: копія поверхнева. Якщо ви змінюватимете сам об'єкт частини (наприклад, parts[i].text += delta), React цього теж не побачить. Змінений елемент треба замінювати новим об'єктом: parts[i] = { ...parts[i], text: parts[i].text + delta }.
+        // Shallow copy, so parts must be replaced rather than mutated in place
         const snapshot = [...parts];
         const activeStream = activeStreamRef.current;
         if(!activeStream) return;
@@ -133,7 +130,7 @@ export function useChat(
             .map((p)=> p.text)
             .join("");
 
-        updateMessages((prev)=> [
+        setMessages((prev)=> [
             ...prev,
             {
                 id: crypto.randomUUID(),
@@ -164,10 +161,10 @@ export function useChat(
 
         if(!response.ok){
             const message = await getErrorMessage(response);
-            updateMessages((prev)=> [
+            setMessages((prev)=> [
                 ...prev,
                 {
-                    // коли сервер повертає помилку, код додає в список messages локальне повідомлення з role: "error". Сервер його не створював, тому своєї id з бази даних у нього немає. Проте кожному елементу списку потрібна унікальна id, наприклад щоб React міг використати її як key під час рендеру. Тож id генерується прямо в CLI.
+                    // Local error with no DB row, so generate an id for the React key
                     id: crypto.randomUUID(),
                     role: "error",
                     content: message,
@@ -177,6 +174,8 @@ export function useChat(
         }; 
 
         const parts: ClientMessagePart[] = [];
+        let receivedTerminalEvent = false;
+        let streamEventError = false;
         const stream = response
             // decoding response from server
             .body!.pipeThrough(new TextDecoderStream())
@@ -189,8 +188,9 @@ export function useChat(
             try {
                 event = chatStreamEventSchema.parse(JSON.parse(data));
             } catch (err) {
-                const message = err instanceof Error ? err.message : "Invalide stream event";
-                updateMessages((prev) => [
+                streamEventError = true;
+                const message = err instanceof Error ? err.message : "Invalid stream event";
+                setMessages((prev) => [
                     ...prev,
                     {
                         id: crypto.randomUUID(),
@@ -205,11 +205,10 @@ export function useChat(
                 case "reasoning-delta":{
                     const last = parts[parts.length-1];
                     if (last && last.type==="reasoning"){
-                        last.text += event.text;
+                        parts[parts.length - 1] = { ...last, text: last.text + event.text };
                     }else {
                         parts.push({type:"reasoning", text: event.text});
                     }
-                    // передає в React-стан частини відповіді асистента 
                     emitParts(activeStream.requestId, parts);
                     break; 
                 }
@@ -225,12 +224,12 @@ export function useChat(
                     break;
                 }
                 case "tool-result": {
-                    const tc = parts.find(
-                        (p): p is ClientToolCallPart => p.type === "tool-calling" && p.id === event.toolCallId,
+                    const index = parts.findIndex(
+                        (p) => p.type === "tool-calling" && p.id === event.toolCallId,
                     );
-                    if (tc) {
-                        tc.result = event.result;
-                        tc.status = "done";
+                    const tc = parts[index];
+                    if (tc?.type === "tool-calling") {
+                        parts[index] = { ...tc, result: event.result, status: "done" };
                     }
                     emitParts(activeStream.requestId, parts);
                     break;
@@ -238,7 +237,7 @@ export function useChat(
                 case "text-delta":{
                     const last = parts[parts.length-1];
                     if(last && last.type === "text"){
-                        last.text += event.text;
+                        parts[parts.length - 1] = { ...last, text: last.text + event.text };
                     } else {
                         parts.push({type: "text", text: event.text});
                     }
@@ -248,13 +247,14 @@ export function useChat(
                 }
                 case "done": {
                     if(!isActiveRequest(activeStream.requestId)) return;
+                    receivedTerminalEvent = true;
 
                     const fullText = parts
                         .filter((p)=> p.type === "text")
                         .map((p)=> p.text)
                         .join("");
 
-                    updateMessages((prev)=> [
+                    setMessages((prev)=> [
                         ...prev,
                         {
                             id: event.messageId,
@@ -269,7 +269,8 @@ export function useChat(
                     break;
                 }
                 case "error":
-                    updateMessages((prev) => [
+                    receivedTerminalEvent = true;
+                    setMessages((prev) => [
                         ...prev,
                         {
                             id: crypto.randomUUID(),
@@ -280,7 +281,16 @@ export function useChat(
                     break;
             }
         }
-    }, [updateMessages, emitParts, isActiveRequest]);
+
+        // The body ended without done/error, so keep the partial answer
+        if (
+            !receivedTerminalEvent &&
+            !streamEventError &&
+            isActiveRequest(activeStream.requestId)
+        ) {
+            captureInterruptedMessage(activeStream);
+        }
+    }, [emitParts, isActiveRequest, captureInterruptedMessage]);
 
     const runStream = useCallback(async (
         { mode, model, request}: RunStreamParams
@@ -306,7 +316,7 @@ export function useChat(
             if(err instanceof DOMException && err.name === "AbortError") return;
             if(!isActiveRequest(activeStream.requestId)) return;
             const msg = err instanceof Error ? err.message:String(err);
-            updateMessages((prev)=> [
+            setMessages((prev)=> [
                 ...prev,
                 {
                     id: crypto.randomUUID(),
@@ -317,7 +327,7 @@ export function useChat(
         } finally {
             clearStream(activeStream.requestId);
         }
-    },[clearStream, handleStream, isActiveRequest, updateMessages]);
+    },[clearStream, handleStream, isActiveRequest]);
 
     const stopActiveStream = useCallback((
         capturePartial: boolean
@@ -376,7 +386,7 @@ export function useChat(
             model,
         };
 
-        updateMessages((prev)=>[...prev, userMessage]);
+        setMessages((prev)=>[...prev, userMessage]);
 
         await runStream({
             mode,
@@ -392,7 +402,7 @@ export function useChat(
                 );
             },
         });
-    }, [runStream, sessionId, updateMessages, stopActiveStream]);
+    }, [runStream, sessionId, stopActiveStream]);
 
     const abort = useCallback(()=>{
         stopActiveStream(false);

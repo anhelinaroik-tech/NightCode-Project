@@ -1,7 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { resolve, relative, isAbsolute, join } from "path";
+import { join, relative } from "path";
 import { readdir, stat } from "fs/promises";
+import { resolveProjectPath } from "./project-path";
 
 export function createListDirectoryTool(cwd: string) {
     return tool({
@@ -14,9 +15,8 @@ export function createListDirectoryTool(cwd: string) {
                 .default("."),
         }),
         execute: async ({ path }) => {
-            const resolved = resolve(cwd, path);
-            const rel = relative(cwd, resolved);
-            if (rel.startsWith("..") || isAbsolute(rel)) {
+            const resolved = await resolveProjectPath(cwd, path);
+            if (!resolved) {
                 return { error: "Path is outside the project directory" };
             }
 
@@ -46,7 +46,7 @@ export function createListDirectoryTool(cwd: string) {
                 });
 
                 return {
-                    path: rel || ".",
+                    path: relative(cwd, resolved) || ".",
                     entries: results,
                 };
             } catch (err) {
