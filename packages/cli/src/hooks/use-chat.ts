@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useChat as useAiChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -9,6 +9,7 @@ import {
 } from "ai";
 import {
   DEFAULT_CHAT_MODEL_ID,
+  isReadOnlyTool,
   Mode,
   type ModeType,
   type SupportedChatModelId,
@@ -37,6 +38,12 @@ type ChatTools = {
 
 export type Message = UIMessage<ChatMessageMetadata, never, ChatTools>;
 
+export type ToolApprovalRequest = {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+};
+
 type SubmitParams = {
   userText: string;
   mode: ModeType;
@@ -50,6 +57,31 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     mode: Mode.BUILD,
     model: DEFAULT_CHAT_MODEL_ID,
   });
+  // Tool calls that change local state wait here until the user allows or rejects them.
+  const [approvalQueue, setApprovalQueue] = useState<ToolApprovalRequest[]>([]);
+  const approvalResolversRef = useRef(new Map<string, (approved: boolean) => void>());
+  // Set when the user interrupts, so rejected/finished tool calls don't restart the turn.
+  const interruptedRef = useRef(false);
+
+  const requestApproval = (request: ToolApprovalRequest) =>
+    new Promise<boolean>((resolve) => {
+      approvalResolversRef.current.set(request.toolCallId, resolve);
+      setApprovalQueue((queue) => [...queue, request]);
+    });
+
+  const respondToApproval = useCallback((toolCallId: string, approved: boolean) => {
+    const resolve = approvalResolversRef.current.get(toolCallId);
+    if (!resolve) return;
+    approvalResolversRef.current.delete(toolCallId);
+    setApprovalQueue((queue) => queue.filter((r) => r.toolCallId !== toolCallId));
+    resolve(approved);
+  }, []);
+
+  const rejectAllApprovals = useCallback(() => {
+    for (const toolCallId of [...approvalResolversRef.current.keys()]) {
+      respondToApproval(toolCallId, false);
+    }
+  }, [respondToApproval]);
 
   const transport = useMemo(() => {
     return new DefaultChatTransport<Message>({
@@ -93,11 +125,26 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     transport,
     // Tools have no `execute` on the server; once every call in the last assistant
     // message has an output, send the results back so the model can continue.
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: (options) =>
+      !interruptedRef.current && lastAssistantMessageIsCompleteWithToolCalls(options),
     async onToolCall({ toolCall }) {
       if (toolCall.dynamic) return;
 
       try {
+        if (!isReadOnlyTool(toolCall.toolName)) {
+          const approved = await requestApproval({
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            input: toolCall.input,
+          });
+          if (!approved) {
+            throw new Error(
+              `The user rejected this ${toolCall.toolName} call. Do not retry it; ask the user how to proceed.`
+            );
+          }
+        }
+
+
         const output = await executeLocalTool(
           toolCall.toolName,
           toolCall.input,
@@ -122,8 +169,15 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
 
   const submit = ({ userText, mode, model }: SubmitParams) => {
     configRef.current = { mode, model };
+    interruptedRef.current = false;
     return chat.sendMessage({ text: userText, metadata: { mode, model } });
   };
+
+  const stop = useCallback(() => {
+    interruptedRef.current = true;
+    rejectAllApprovals();
+    return chat.stop();
+  }, [chat.stop, rejectAllApprovals]);
 
   return {
     messages: chat.messages,
@@ -131,7 +185,9 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     error: chat.error,
     isStreaming: chat.status === "submitted" || chat.status === "streaming",
     submit,
-    abort: chat.stop,
-    interrupt: chat.stop,
+    abort: stop,
+    interrupt: stop,
+    pendingApproval: approvalQueue[0],
+    respondToApproval,
   };
 }

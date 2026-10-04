@@ -81,6 +81,14 @@ export const buildToolContracts = {
 
 export type ToolContracts = typeof buildToolContracts;
 
+// Tools that only read the project. Every other tool changes local state, so the CLI
+// asks the user before running it.
+const readOnlyToolNames = new Set<string>(Object.keys(readOnlyToolContracts));
+
+export function isReadOnlyTool(toolName: string){
+  return readOnlyToolNames.has(toolName);
+}
+
 export function getToolContracts(mode: ModeType){
   return mode === Mode.PLAN 
     ? readOnlyToolContracts 

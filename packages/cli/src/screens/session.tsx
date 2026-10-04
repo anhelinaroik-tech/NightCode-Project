@@ -17,6 +17,8 @@ import { useChat } from "../hooks/use-chat";
 import type { Message } from "../hooks/use-chat";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { usePromptConfig } from "../providers/prompt-config";
+import { useDialog } from "../providers/dialog";
+import { ToolApprovalDialogContent } from "../components/dialogs";
 
 type SessionData = InferResponseType<
   (typeof apiClient.sessions)[":id"]["$get"],
@@ -67,10 +69,17 @@ function SessionChat({
   const { isTopLayer } = useKeyboardLayer();
   // Single source for what is sent to the server and shown in the status bar
   const { mode, model } = usePromptConfig();
-  const { messages, status, submit, abort, interrupt, error } = useChat(
-    session.id,
-    initialMessages
-  );
+  const {
+    messages,
+    status,
+    submit,
+    abort,
+    interrupt,
+    error,
+    pendingApproval,
+    respondToApproval,
+  } = useChat(session.id, initialMessages);
+  const dialog = useDialog();
   const hasSubmitedInitialPromptRef = useRef(false);
 
   // Stop the pending reply when the user leaves this session.
@@ -88,6 +97,22 @@ function SessionChat({
     }
   });
 
+  // Ask before running a tool that changes local state; one dialog per call, in order.
+  useEffect(() => {
+    if (!pendingApproval) return;
+    const { toolCallId } = pendingApproval;
+    dialog.open({
+      title: "Allow local tool?",
+      children: (
+        <ToolApprovalDialogContent
+          request={pendingApproval}
+          onRespond={(approved) => respondToApproval(toolCallId, approved)}
+        />
+      ),
+      onClose: () => respondToApproval(toolCallId, false),
+    });
+  }, [pendingApproval, dialog, respondToApproval]);
+
   useEffect(()=>{
     if(!initialPrompt || hasSubmitedInitialPromptRef.current) return;
     hasSubmitedInitialPromptRef.current = true;
@@ -101,6 +126,7 @@ function SessionChat({
   return (
     <SessionShell
       onSubmit={(text) => submit({ userText: text, mode, model })}
+      inputDisabled={pendingApproval != null}
       loading={status === "streaming" || status === "submitted"}
       interruptible={status === "streaming" || status === "submitted"}
       onInterrupt={interrupt}

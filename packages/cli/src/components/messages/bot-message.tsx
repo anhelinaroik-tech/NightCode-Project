@@ -32,6 +32,52 @@ function formatToolArgs(tc: ToolPart): string {
   return Object.values(tc.input).map(String).join(" ");
 }
 
+const MAX_RESULT_LINES = 5;
+
+function countOf(output: Record<string, unknown>, key: string){
+  const value = output[key];
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function lastLines(text: string){
+  const lines = text.trimEnd().split("\n");
+  return lines.length > MAX_RESULT_LINES
+    ? ["…", ...lines.slice(-MAX_RESULT_LINES)].join("\n")
+    : lines.join("\n");
+}
+
+// One-line summary of a local tool's result (plus the tail of bash output).
+function formatToolResult(toolName: string, output: unknown): string {
+  if(output == null || typeof output !== "object") return String(output ?? "");
+  const result = output as Record<string, unknown>;
+  const truncated = result.truncated || result.truncate ? " (truncated)" : "";
+
+  switch(toolName){
+    case "readFile": {
+      const content = typeof result.content === "string" ? result.content : "";
+      return `Read ${content.split("\n").length} lines${truncated}`;
+    }
+    case "listDirectory":
+      return `${countOf(result, "entries")} entries`;
+    case "glob":
+      return `${countOf(result, "files")} files${truncated}`;
+    case "grep":
+      return `${countOf(result, "matches")} matches${truncated}`;
+    case "writeFile":
+      return `Wrote ${String(result.bytesWritten ?? 0)} bytes`;
+    case "editFile":
+      return "Edited";
+    case "bash": {
+      const stdout = typeof result.stdout === "string" ? result.stdout : "";
+      const stderr = typeof result.stderr === "string" ? result.stderr : "";
+      const tail = lastLines(`${stdout}${stderr}`);
+      return `Exit code ${String(result.exitCode)}${tail ? `\n${tail}` : ""}`;
+    }
+    default:
+      return JSON.stringify(output).slice(0, 200);
+  }
+}
+
 type PartGroup = {
   type: ClientMessagePart["type"];
   parts: ClientMessagePart[];
@@ -112,8 +158,13 @@ export function BotMessage({
                   ? "…" 
                   : ""
                   }
-                  {part.state === "output-error" ? `${part.errorText}` : ""}
                   </text>
+                  {part.state === "output-available" ? (
+                    <text attributes={TextAttributes.DIM}>→ {formatToolResult(toolName, part.output)}</text>
+                  ) : null}
+                  {part.state === "output-error" ? (
+                    <text fg={colors.error}>✕ {part.errorText}</text>
+                  ) : null}
                 </box>
               );
             }

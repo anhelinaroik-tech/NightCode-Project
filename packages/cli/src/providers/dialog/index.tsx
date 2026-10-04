@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useMemo } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { TextAttributes, RGBA } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
@@ -28,20 +28,31 @@ type DialogProviderProps={
 export function DialogProvider({children}: DialogProviderProps) {
     const [currentDialog, setCurrentDialog] = useState<DialogConfig | null>(null);
     const {push, pop} = useKeyboardLayer();
+    const onCloseRef = useRef<(() => void) | undefined>(undefined);
+
+    // Clear the ref before calling it, so onClose runs once even if it closes or opens a dialog.
+    const runOnClose = useCallback(()=>{
+        const onClose = onCloseRef.current;
+        onCloseRef.current = undefined;
+        onClose?.();
+    }, []);
 
     const close = useCallback(()=>{
         setCurrentDialog(null);
         pop("dialog");
-    }, [pop]);
+        runOnClose();
+    }, [pop, runOnClose]);
 
     const open = useCallback(
         (config: DialogConfig)=>{
+            runOnClose();
+            onCloseRef.current = config.onClose;
             setCurrentDialog(config);
             push("dialog", ()=>{
                 close();
                 return true;
             });
-        }, [push, close]
+        }, [push, close, runOnClose]
     );
 
     const value = useMemo<DialogContextValue>(() => ({ open, close }), [open, close]);

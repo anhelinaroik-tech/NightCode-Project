@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "path";
-import { toolInputSchemas, Mode, type ModeType } from "@nightcode/shared";
+import { isReadOnlyTool, toolInputSchemas, Mode, type ModeType } from "@nightcode/shared";
 
 const MAX_FILE_SIZE = 10_000;
 const MAX_RESULTS = 200;
@@ -35,10 +35,7 @@ export async function executeLocalTool(
   input: unknown,
   mode: ModeType
 ) {
-  if (
-    mode === Mode.PLAN &&
-    !["readFile", "listDirectory", "glob", "grep"].includes(toolName)
-  ) {
+  if (mode === Mode.PLAN && !isReadOnlyTool(toolName)) {
     throw new Error(`Tool ${toolName} is not available in PLAN mode`);
   }
 

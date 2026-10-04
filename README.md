@@ -76,25 +76,27 @@ bun run typecheck
 
 ## Tools and permissions
 
-The model can call tools that run **on the server**, inside the session's project directory (`cwd`). A session without a `cwd` gets no tools. Which tools are offered depends on the agent mode:
+Tools run **on your machine, inside the CLI**, not on the server. The server only tells the model which tools exist (their names and input schemas, shared through `@nightcode/shared`). When the model calls a tool, the CLI runs it in the directory you started `nightcode` from and sends the result back, and the model continues its answer. Which tools are offered depends on the agent mode:
 
-| Tool            | What it can do | PLAN | BUILD |
-| --------------- | -------------- | :--: | :---: |
-| `readFile`      | Read a file (first 10,000 characters) | ✓ | ✓ |
-| `listDirectory` | List a directory, skipping hidden entries and `node_modules` | ✓ | ✓ |
-| `glob`          | Find files by pattern (up to 200 results) | ✓ | ✓ |
-| `grep`          | Search file contents by regex (up to 50 matches) | ✓ | ✓ |
-| `writeFile`     | Create or overwrite a file, creating parent directories | | ✓ |
-| `editFile`      | Replace one exact, unique string in a file | | ✓ |
-| `bash`          | Run any shell command in `cwd` (30 s default timeout, output truncated to 20,000 characters) | | ✓ |
+| Tool            | What it can do | PLAN | BUILD | Asks first |
+| --------------- | -------------- | :--: | :---: | :--------: |
+| `readFile`      | Read a file (first 10,000 characters) | ✓ | ✓ | |
+| `listDirectory` | List a directory, skipping hidden entries and `node_modules` | ✓ | ✓ | |
+| `glob`          | Find files by pattern (up to 200 results) | ✓ | ✓ | |
+| `grep`          | Search file contents by regex (up to 50 matches) | ✓ | ✓ | |
+| `writeFile`     | Create or overwrite a file, creating parent directories | | ✓ | ✓ |
+| `editFile`      | Replace one exact, unique string in a file | | ✓ | ✓ |
+| `bash`          | Run any shell command (30 s default timeout, output truncated to 20,000 characters) | | ✓ | ✓ |
 
 Boundaries:
 
-- Every tool input is validated against its Zod schema before it runs; invalid input is rejected without executing.
-- File tools resolve paths against `cwd` and refuse anything outside it.
-- Tool failures are returned to the model as `{ error }` results, so the conversation continues instead of crashing.
-- A single answer is capped at 50 tool-calling steps.
-- **`bash` is not sandboxed.** It runs with the server's user permissions and environment, so in BUILD mode the model can do anything that user can. Use PLAN mode for read-only work.
+- **Approval.** Before `writeFile`, `editFile` or `bash` runs, the CLI shows what it will do (the command, the file and its contents, or the edit) and waits. `y`/Enter allows it; `n`, Esc or clicking outside rejects it. A rejection is sent back to the model as a tool error, and the model is told not to retry. Several calls in one step are asked one after another.
+- **Read-only tools run without asking.** They can read any file inside the project directory, including files like `.env`, and the content is sent to the model provider.
+- **PLAN mode** offers only the read-only tools, and the CLI also refuses to run a changing tool in PLAN mode if the model asks for one anyway.
+- Every tool input is validated against its Zod schema before it runs. File tools resolve paths against the project directory and refuse anything outside it.
+- Tool failures (bad input, missing file, command errors) are sent back to the model as tool errors, so the conversation continues instead of hanging. The UI shows each call with its input and a short result, or the error in red.
+- Pressing Esc during a reply rejects any pending approvals and stops the turn; it does not resubmit tool results.
+- **`bash` is not sandboxed.** Once allowed, a command runs with your user's permissions and environment variables, so read the command before approving it. Use PLAN mode for read-only work.
 
 ## Configuration
 
@@ -112,7 +114,7 @@ Bun workspace with four packages:
 ```
 packages/
 ├── cli/        # @nightcode/cli — the OpenTUI app; calls the server through a typed Hono client
-├── server/     # @nightcode/server — Hono API (/health, /sessions)
+├── server/     # @nightcode/server — Hono API (/health, /sessions, /chat)
 ├── shared/     # @nightcode/shared — models and Zod schemas used by both CLI and server
 └── database/   # @nightcode/database — Prisma schema, migrations and the db client
 ```
