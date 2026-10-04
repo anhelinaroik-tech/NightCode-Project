@@ -33,10 +33,15 @@ export async function checkDatabaseConnection(){
     try{
         await db.$queryRaw`SELECT 1`;
     } catch(error){
-        // Driver adapter errors carry the cause in `code` (e.g. ECONNREFUSED) and an empty-ish message
+        // Prisma wraps driver failures as a generic P2010; the real cause (e.g. a bad password) is in meta.driverAdapterError
+        const driverCause = (error as {meta?: {driverAdapterError?: {cause?: {originalCode?: unknown; originalMessage?: unknown}}}})
+            ?.meta?.driverAdapterError?.cause;
+        // Connection errors carry the cause in `code` (e.g. ECONNREFUSED) and an empty-ish message
         const code = (error as {code?: unknown})?.code;
         const message = error instanceof Error ? error.message.trim() : String(error);
-        const reason = typeof code === "string" ? code : message;
+        const reason = typeof driverCause?.originalMessage === "string"
+            ? `${driverCause.originalMessage} (${String(driverCause.originalCode)})`
+            : typeof code === "string" ? code : message;
         throw new Error(`Cannot connect to ${describeDatabase()}: ${reason}`);
     }
 }
