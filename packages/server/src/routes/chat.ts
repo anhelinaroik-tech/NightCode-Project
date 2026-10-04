@@ -109,8 +109,9 @@ type StreamParams = {
 
 // Only the token totals feed billing, so the detail breakdowns come from the latest step
 function addUsage(a: LanguageModelUsage, b: LanguageModelUsage): LanguageModelUsage {
+    // A step without a count must not wipe out the counts already known from earlier steps
     const sum = (x: number | undefined, y: number | undefined) =>
-        x === undefined || y === undefined ? undefined : x + y;
+        x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0);
     return {
         ...b,
         inputTokens: sum(a.inputTokens, b.inputTokens),
@@ -121,7 +122,24 @@ function addUsage(a: LanguageModelUsage, b: LanguageModelUsage): LanguageModelUs
 
 type IngestUsageForMessageParams = {
     messageId: string;
-    status: "complete" | "interrupted";
+    status: "complete" | "interrupted" | "error";
+}
+
+const INGEST_RETRY_DELAYS_MS = [1_000, 5_000, 30_000];
+
+// Polar deduplicates events by external_id, so retrying with the same eventId can't bill twice.
+// Runs outside the SSE response, so a slow or failing Polar doesn't delay the reply.
+async function ingestAiUsageWithRetry(params: Parameters<typeof ingestAiUsage>[0]) {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            await ingestAiUsage(params);
+            return;
+        } catch (error) {
+            const delay = INGEST_RETRY_DELAYS_MS[attempt];
+            if (delay === undefined) throw error;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+    }
 }
 
 async function streamAIResponse(
@@ -135,6 +153,8 @@ async function streamAIResponse(
     const resolvedModel = resolveChatModel(model);
     // Summed per finished step, so an aborted reply is still billed for the steps that completed
     let completedUsage: LanguageModelUsage | null = null;
+    // One usage event per reply: the error path can run after the complete path already billed
+    let usageIngestionStarted = false;
 
     const getFullText = () =>
         parts
@@ -185,36 +205,42 @@ async function streamAIResponse(
         });
     };
 
-    const ingestUsageForMessage = async ({messageId, status}: IngestUsageForMessageParams) => {
-        if(!completedUsage) return;
+    const ingestUsageForMessage = ({messageId, status}: IngestUsageForMessageParams) => {
+        if(!completedUsage || usageIngestionStarted) return;
+        usageIngestionStarted = true;
+        const usage = completedUsage;
 
-        try {
-            const billableUsage = calculateCreditsForUsage({
-                provider: resolvedModel.provider,
-                model: resolvedModel.modelId,
-                usage: completedUsage,
-            });
+        void (async () => {
+            try {
+                const billableUsage = calculateCreditsForUsage({
+                    provider: resolvedModel.provider,
+                    model: resolvedModel.modelId,
+                    usage,
+                });
 
-            await ingestAiUsage({
-                externalCustomerId: userId,
-                eventId: `chat-message:${messageId}`,
-                credits: billableUsage.credits,
-            });
-        } catch (error) {
-            console.error("Failed to ingest Polar AI usage for chat message", {
-                error,
-                sessionId,
-                messageId,
-                userId,
-            })
-        }
+                await ingestAiUsageWithRetry({
+                    externalCustomerId: userId,
+                    eventId: `chat-message:${messageId}`,
+                    credits: billableUsage.credits,
+                });
+            } catch (error) {
+                Sentry.captureException(error);
+                console.error("Failed to ingest Polar AI usage for chat message", {
+                    error,
+                    sessionId,
+                    messageId,
+                    status,
+                    userId,
+                });
+            }
+        })();
     }
 
     const persistInterruptedMessageAndUsage = async ()=>{
         const interruptedMessage = await persistInterruptedMessage();
         if(!interruptedMessage) return;
 
-        await ingestUsageForMessage({
+        ingestUsageForMessage({
             messageId: interruptedMessage.id,
             status: "interrupted",
         });
@@ -325,7 +351,7 @@ async function streamAIResponse(
             },
         });
 
-        await ingestUsageForMessage({
+        ingestUsageForMessage({
             messageId: assistantMessage.id,
             status: "complete",
         });
@@ -348,7 +374,7 @@ async function streamAIResponse(
 
         // A failed save must not hide the model error from the client
         try {
-            await db.message.create({
+            const errorMessage = await db.message.create({
                 data:{
                     sessionId,
                     role: "ERROR",
@@ -357,6 +383,12 @@ async function streamAIResponse(
                     content: message,
                     mode,
                 },
+            });
+
+            // Steps that finished before the failure were still paid for by us
+            ingestUsageForMessage({
+                messageId: errorMessage.id,
+                status: "error",
             });
         } catch (dbErr) {
             Sentry.captureException(dbErr);
