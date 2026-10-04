@@ -10,7 +10,6 @@ import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
 import prettyMs from "pretty-ms";
 import {
-  type SupportedChatModel,
   type SupportedChatModelId,
 } from "@nightcode/shared";
 import { useChat } from "../hooks/use-chat";
@@ -55,7 +54,10 @@ function mapDbMessages(dbMessages: SessionData["messages"]): Message[] {
             ? { ...p, type: "tool-calling" as const, status: "done" as const }
             : p
         )
-      : [];
+      : // Messages saved before parts existed (or with invalid parts) only have content
+        m.content.length > 0
+        ? [{ type: "text" as const, text: m.content }]
+        : [];
 
     return {
       id: m.id,
@@ -83,7 +85,6 @@ function ChatMessage({ msg }: { msg: Message }) {
       model={msg.model}
       mode={msg.mode}
       duration={msg.duration}
-      streaming={false}
       interrupted={msg.interrupted}
     />
   );
@@ -129,7 +130,6 @@ function SessionChat({ session }: { session: SessionData }) {
           parts={streaming.parts}
           model={streaming.model}
           mode={streaming.mode}
-          streaming
         />
       )}
     </SessionShell>

@@ -3,6 +3,7 @@ import { z} from "zod";
 
 const MAX_OUTPUT = 20_000;
 const DEFAULT_TIMEOUT = 30_000;
+const MAX_TIMEOUT = 120_000;
 
 function truncate(output: string): string {
     if (output.length <= MAX_OUTPUT) return output;
@@ -17,37 +18,38 @@ export function createBashTool(cwd: string){
             command: z.string().describe("The shell command to execute"),
             timeout: z
                 .number()
-                .describe("Timeout in milliseconds (default: 30000)")
+                .int()
+                .positive()
+                .max(MAX_TIMEOUT)
+                .describe("Timeout in milliseconds (default: 30000, max: 120000)")
                 .default(DEFAULT_TIMEOUT),
         }),
         execute: async ({command, timeout}) => {
             try {
+                // Own process group, so the timeout can also kill background children (`cmd &`).
+                // Otherwise they keep stdout/stderr open and the reads below never finish.
                 const proc = Bun.spawn(["bash", "-c", command], {
                     cwd,
                     stdout: "pipe",
                     stderr: "pipe",
                     env: {...process.env, TERM: "dumb"},
-                    timeout,
+                    detached: true,
                 });
 
                 const timer = setTimeout(()=> {
-                    proc.kill();
+                    try {
+                        process.kill(-proc.pid, "SIGKILL");
+                    } catch {
+                        // group already exited
+                    }
                 },timeout);
 
-                const [stdout, stderr] = await Promise.all([
+                const [stdout, stderr, exitCode] = await Promise.all([
                     new Response(proc.stdout).text(),
                     new Response(proc.stderr).text(),
                     proc.exited,
                 ]);
-
-                const exitCode = await proc.exited;
                 clearTimeout(timer);
-
-                // truncate - cuts too long text
-                const truncate = (s: string) => 
-                    s.length > MAX_OUTPUT
-                        ? s.slice(0, MAX_OUTPUT) + `\n... (truncated, ${s.length} total chars)` 
-                        : s;
 
                 return {
                     stdout: truncate(stdout),

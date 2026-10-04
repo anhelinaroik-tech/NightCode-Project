@@ -1,7 +1,7 @@
-import { resolve, relative, isAbsolute } from "path";
 import { readFile } from "fs/promises";
 import { tool } from "ai";
 import { z } from "zod";
+import { resolveProjectPath } from "./project-path";
 
 const MAX_FILE_SIZE = 10_000;
 
@@ -13,9 +13,8 @@ export function createReadFileTool(cwd: string) {
             path: z.string().describe("Relative path to the file to read"),
         }),
         execute: async ({ path }) => {
-            const resolved = resolve(cwd, path);
-            const rel = relative(cwd, resolved);
-            if (rel.startsWith("..") || isAbsolute(rel)) {
+            const resolved = await resolveProjectPath(cwd, path);
+            if (!resolved) {
                 return { error: "Path is outside the project directory" };
             }
 

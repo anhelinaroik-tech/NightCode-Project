@@ -1,4 +1,4 @@
-import { Mode } from "@nightcode/database";
+import { Mode } from "@nightcode/database/enums";
 import { useTheme } from "../../providers/theme";
  
 type Props = {
