@@ -14,6 +14,8 @@ type DialogSearchListProps<T> = {
   items: T[];
   onSelect: (item: T) => void;
   onHighlight?: (item: T) => void;
+  // ctrl+d on the highlighted item; the caller decides whether to ask for confirmation
+  onDelete?: (item: T) => void;
   filterFn: (item: T, query: string) => boolean;
   renderItem: (item: T, isSelected: boolean) => ReactNode;
   getKey: (item: T) => string;
@@ -26,6 +28,7 @@ export function DialogSearchList<T>({
   items,
   onSelect,
   onHighlight,
+  onDelete,
   filterFn,
   renderItem,
   getKey,
@@ -55,6 +58,11 @@ export function DialogSearchList<T>({
     ? items.filter((item) => filterFn(item, searchValue))
     : items;
 
+  // Items can shrink (e.g. after a delete), so keep the highlight on an existing row.
+  if (filtered.length > 0 && selectedIndex > filtered.length - 1) {
+    setSelectedIndex(filtered.length - 1);
+  }
+
   const visibleHeight = Math.min(filtered.length, MAX_VISIBLE_ITEMS);
 
   // Scrolling and onHighlight are side effects, so they run here rather than inside a setState updater.
@@ -67,7 +75,11 @@ export function DialogSearchList<T>({
   useKeyboard((key) => {
     if (!isTopLayer("dialog")) return;
 
-    if (key.name === "return" || key.name === "enter") {
+    if (onDelete && key.ctrl && key.name === "d") {
+      key.preventDefault();
+      const item = filtered[selectedIndex];
+      if (item) onDelete(item);
+    } else if (key.name === "return" || key.name === "enter") {
       key.preventDefault();
       const item = filtered[selectedIndex];
       if (item) {

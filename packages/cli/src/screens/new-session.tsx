@@ -7,12 +7,11 @@ import { SessionShell } from "../components/session-shell";
 import {useToast} from "../providers/toast";
 import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
-import { usePromptConfig } from "../providers/prompt-config";
-import { Mode } from "@nightcode/database/enums";
+import { modeSchema } from "@nightcode/shared";
 
 const newSessionStateSchema = z.object({
   message: z.string(),
-  mode: z.enum(Mode),
+  mode: modeSchema,
   model: z.string(),
 });
 
@@ -21,10 +20,6 @@ export function NewSession() {
   const location = useLocation();
   const toast = useToast(); 
   const hasStartedRef = useRef(false);
-  const { mode, model } = usePromptConfig();
-  // Read through a ref so a mode/model change can't re-run the effect and drop the in-flight navigation
-  const promptConfigRef = useRef({ mode, model });
-  promptConfigRef.current = { mode, model };
 
 const state = useMemo(()=> {
   const parsed = newSessionStateSchema.safeParse(location.state);
@@ -43,7 +38,6 @@ const state = useMemo(()=> {
     if(!state || hasStartedRef.current) return;
 
     hasStartedRef.current = true;
-    const { mode, model } = promptConfigRef.current;
 
     let ignore = false;
     const createSession = async ()=>{
@@ -51,13 +45,6 @@ const state = useMemo(()=> {
         const res = await apiClient.sessions.$post({
           json:{
             title: state.message.slice(0,100),
-            cwd: process.cwd(),
-            initialMessage: {
-              role: "USER",
-              content: state.message,
-              mode: state.mode,
-              model: state.model,
-            },
           }
         });
 
@@ -69,7 +56,7 @@ const state = useMemo(()=> {
         navigate(
           `/sessions/${session.id}`,
           // Pass the created session via router state so the next screen doesn't refetch it
-          {replace: true, state:{session}}
+          {replace: true, state:{session, initialPrompt: state}}
         );
       } catch (error){
         if (ignore) return;

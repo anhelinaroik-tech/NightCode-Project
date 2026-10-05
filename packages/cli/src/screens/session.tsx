@@ -1,5 +1,5 @@
 import { SessionShell } from "../components/session-shell";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router";
 import { z } from "zod";
 import { useKeyboard } from "@opentui/react";
@@ -8,16 +8,17 @@ import { UserMessage, BotMessage, ErrorMessage } from "../components/messages";
 import { useToast } from "../providers/toast";
 import { apiClient } from "../lib/api-client";
 import { getErrorMessage } from "../lib/http-errors";
-import prettyMs from "pretty-ms";
 import {
+  type SupportedChatModel,
   type SupportedChatModelId,
+  type ModeType,
 } from "@nightcode/shared";
 import { useChat } from "../hooks/use-chat";
-import type { Message, ClientMessagePart } from "../hooks/use-chat";
-import { MessageStatus } from "@nightcode/database/enums";
+import type { Message } from "../hooks/use-chat";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { usePromptConfig } from "../providers/prompt-config";
-import { messagePartsSchema } from "@nightcode/shared";
+import { useDialog } from "../providers/dialog";
+import { ToolApprovalDialogContent } from "../components/dialogs";
 
 type SessionData = InferResponseType<
   (typeof apiClient.sessions)[":id"]["$get"],
@@ -28,110 +29,115 @@ const sessionLocationSchema = z.object({
   session: z.custom<SessionData>(
     (val) => val != null && typeof val === "object" && "id" in val
   ),
+  initialPrompt: z.
+    object({
+      message: z.string(),
+      mode: z.custom<ModeType>(),
+      model: z.custom<SupportedChatModelId>(), 
+    })
+    .optional(),
 });
-
-function mapDbMessages(dbMessages: SessionData["messages"]): Message[] {
-  return dbMessages.map((m): Message => {
-    if (m.role === "ERROR") {
-      return { id: m.id, role: "error", content: m.content };
-    }
-
-    if (m.role === "USER") {
-      return {
-        id: m.id,
-        role: "user",
-        content: m.content,
-        mode: m.mode,
-        model: m.model as SupportedChatModelId,
-      };
-    }
-
-    const parsedParts =
-      m.parts == null ? null : messagePartsSchema.safeParse(m.parts);
-    const parts: ClientMessagePart[] = parsedParts?.success
-      ? parsedParts.data.map((p) =>
-          p.type === "tool-call"
-            ? { ...p, type: "tool-calling" as const, status: "done" as const }
-            : p
-        )
-      : // Messages saved before parts existed (or with invalid parts) only have content
-        m.content.length > 0
-        ? [{ type: "text" as const, text: m.content }]
-        : [];
-
-    return {
-      id: m.id,
-      role: "assistant",
-      content: m.content,
-      model: m.model as SupportedChatModelId,
-      mode: m.mode,
-      parts,
-      ...(m.duration != null ? { duration: prettyMs(m.duration * 1000) } : {}),
-      interrupted: m.status === MessageStatus.INTERRUPTED,
-    };
-  });
-}
 
 function ChatMessage({ msg }: { msg: Message }) {
   if (msg.role === "user") {
-    return <UserMessage message={msg.content} mode={msg.mode}/>;
+    const text = msg.parts
+      .filter((p) => p.type === "text")
+      .map((p)=> p.text)
+      .join("")
+
+    return <UserMessage message={text} mode={msg.metadata?.mode ?? "BUILD"}/>;
   }
-  if (msg.role === "error") {
-    return <ErrorMessage message={msg.content} />;
-  }
+
   return (
     <BotMessage
       parts={msg.parts}
-      model={msg.model}
-      mode={msg.mode}
-      duration={msg.duration}
-      interrupted={msg.interrupted}
+      model={msg.metadata?.model ?? "unknown"}
+      mode={msg.metadata?.mode ?? "BUILD"}
+      durationMs={msg.metadata?.durationMs}
+      streaming={false}
     />
   );
 }
 
-function SessionChat({ session }: { session: SessionData }) {
-  const [initialMessages] = useState(() => mapDbMessages(session.messages));
+function SessionChat({ 
+  session,
+  initialPrompt,
+}: { session: SessionData,
+     initialPrompt?: {message: string; mode: ModeType; model: SupportedChatModelId};
+ }) {
+  const [initialMessages] = useState(() => session.messages as unknown as Message[]);
   const { isTopLayer } = useKeyboardLayer();
   // Single source for what is sent to the server and shown in the status bar
   const { mode, model } = usePromptConfig();
-  const { messages, streaming, submit, abort, interrupt } = useChat(
-    session.id,
-    initialMessages
-  );
+  const {
+    messages,
+    status,
+    submit,
+    abort,
+    interrupt,
+    error,
+    pendingApproval,
+    respondToApproval,
+    isRunningTools,
+  } = useChat(session.id, initialMessages);
+  // A local tool can still be running after the stream ended
+  const isBusy = status === "streaming" || status === "submitted" || isRunningTools;
+  const dialog = useDialog();
+  const hasSubmitedInitialPromptRef = useRef(false);
 
   // Stop the pending reply when the user leaves this session.
   useEffect(() => {
-    return () => abort();
+    return () => void abort();
   }, [abort]);
 
   // Let the user cancel a reply even before the first streamed chunk arrives.
   useKeyboard((key) => {
     if (
-      key.name === "escape" && isTopLayer("base") && streaming.status === "streaming"
+      key.name === "escape" && isTopLayer("base") && isBusy
     ) {
       key.preventDefault();
       interrupt();
     }
   });
 
+  // Ask before running a tool that changes local state; one dialog per call, in order.
+  useEffect(() => {
+    if (!pendingApproval) return;
+    const { toolCallId } = pendingApproval;
+    dialog.open({
+      title: "Allow local tool?",
+      children: (
+        <ToolApprovalDialogContent
+          request={pendingApproval}
+          onRespond={(approved) => respondToApproval(toolCallId, approved)}
+        />
+      ),
+      onClose: () => respondToApproval(toolCallId, false),
+    });
+  }, [pendingApproval, dialog, respondToApproval]);
+
+  useEffect(()=>{
+    if(!initialPrompt || hasSubmitedInitialPromptRef.current) return;
+    hasSubmitedInitialPromptRef.current = true;
+    void submit({
+      userText: initialPrompt.message,
+      mode: initialPrompt.mode,
+      model: initialPrompt.model,
+    })
+  }, [initialPrompt, submit])
+
   return (
     <SessionShell
       onSubmit={(text) => submit({ userText: text, mode, model })}
-      loading={streaming.status === "streaming"}
-      interruptible={streaming.status === "streaming"}
+      inputDisabled={pendingApproval != null}
+      loading={isBusy}
+      interruptible={isBusy}
       onInterrupt={interrupt}
     >
       {messages.map((msg) => (
         <ChatMessage key={msg.id} msg={msg} />
       ))}
-      {streaming.status === "streaming" && streaming.parts.length > 0 && (
-        <BotMessage
-          parts={streaming.parts}
-          model={streaming.model}
-          mode={streaming.mode}
-        />
-      )}
+      {error && <ErrorMessage message={error.message}/>}
     </SessionShell>
   );
 }
@@ -145,13 +151,13 @@ export function Session() {
   // prefetched, redirected throw new session and passed to state
   const prefetched = useMemo(() => {
     const parsed = sessionLocationSchema.safeParse(location.state);
-    return parsed.success ? parsed.data?.session : null;
+    return parsed.success ? parsed.data : null;
   }, [location.state]);
 
-  const [session, setSession] = useState<SessionData | null>(prefetched);
+  const [session, setSession] = useState<SessionData | null>(prefetched?.session ?? null);
 
   useEffect(() => {
-    if (prefetched) return;
+    if (prefetched?.session) return;
 
     setSession(null);
     if (!id) return;
@@ -185,5 +191,11 @@ export function Session() {
   if (!session) {
     return <SessionShell onSubmit={() => {}} inputDisabled loading />;
   }
-  return <SessionChat key={session.id} session={session} />;
+  return (
+  <SessionChat 
+  key={session.id} 
+  session={session} 
+  initialPrompt={prefetched?.initialPrompt}
+  />
+);
 }

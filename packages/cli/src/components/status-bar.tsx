@@ -1,10 +1,10 @@
 import { TextAttributes } from "@opentui/core";
-import { Mode } from "@nightcode/database/enums";
+import { Mode, type ModeType } from "@nightcode/shared";
 import { useTheme } from "../providers/theme";
 import { usePromptConfig } from "../providers/prompt-config";
 
 // "BUILD" -> "Build"
-function formatMode(mode: Mode) {
+function formatMode(mode: ModeType) {
   return mode.charAt(0) + mode.slice(1).toLowerCase();
 }
 

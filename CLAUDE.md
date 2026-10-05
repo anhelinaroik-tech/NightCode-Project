@@ -18,7 +18,7 @@ bun run --cwd packages/database db:deploy     # apply existing migrations
 
 - There is **no test runner, linter or formatter** configured. `typecheck` is the only verification available, and it cannot catch runtime/UI behaviour.
 - The app is a TUI and needs a real TTY. `bun run dev:cli` will not work in a piped/CI shell, so it can't be exercised from Claude Code's Bash tool; UI changes have to be verified by the user running it in a terminal.
-- Env vars live in the root `.env` (`cp .env.example .env`). `DATABASE_URL` is required by the server and Prisma CLI; the CLI reads optional `API_URL`. The database package loads the root `.env` by absolute path, so it works from any cwd.
+- Env vars live in the root `.env` (`cp .env.example .env`). `DATABASE_URL`, the Clerk keys and `POLAR_ACCESS_TOKEN` are required by the server; the CLI reads `API_URL`, `CLERK_FRONTEND_API`/`CLERK_OAUTH_CLIENT_ID` (for `/login`) and `SENTRY_DSN`. The README's Configuration table lists every variable. The database package loads the root `.env` by absolute path, so it works from any cwd.
 - The Prisma client must be generated (`db:generate`) before `typecheck` or the server will work on a fresh clone.
 - The server can be exercised from Bash: `bun run dev:server` in the background, then `curl localhost:3000/health`.
 
@@ -27,9 +27,9 @@ bun run --cwd packages/database db:deploy     # apply existing migrations
 Bun workspace monorepo (`workspaces: ["packages/*"]`). Shared compiler options live in `tsconfig.base.json` (strict, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`); package tsconfigs extend it (the CLI adds the JSX settings). Packages export their TypeScript sources directly (`exports` → `./src/index.ts`), there is no build step.
 
 - `packages/cli` (`@nightcode/cli`) — the OpenTUI app.
-- `packages/server` (`@nightcode/server`) — Hono API. `src/index.ts` checks the DB connection at startup and exits with code 1 and a readable message if it fails; routes are `/health` (200 / 503 depending on DB) and `/sessions` (list, get by id, create). It exports `AppType` for the typed client.
-- `packages/shared` (`@nightcode/shared`) — supported chat models and Zod schemas for message parts / stream events, imported by both CLI and server. Put cross-package types here instead of redefining them.
-- `packages/database` (`@nightcode/database`) — Prisma 7 with the `pg` driver adapter. `prisma/schema.prisma` + `prisma/migrations`; the root export is the generated types only (safe to import without `DATABASE_URL`); `db` and `checkDatabaseConnection` come from `@nightcode/database/client`, enums from `@nightcode/database/enums`.
+- `packages/server` (`@nightcode/server`) — Hono API. `src/index.ts` checks the DB connection at startup and exits with code 1 and a readable message if it fails; routes are `/health` (200 / 503 depending on DB), `/sessions` (list, get by id, create, delete), `/chat` (streams AI SDK UI messages), `/auth` (Clerk OAuth callback) and `/billing` (Polar checkout/portal). `/sessions` and `/chat` require a Clerk OAuth token and are scoped to its user. It exports `AppType` for the typed client.
+- `packages/shared` (`@nightcode/shared`) — supported chat models, modes and the tool contracts (input schemas, `isReadOnlyTool`), imported by both CLI and server. Put cross-package types here instead of redefining them.
+- `packages/database` (`@nightcode/database`) — Prisma 7 with the `pg` driver adapter. `prisma/schema.prisma` + `prisma/migrations`; the root export is the generated types only (safe to import without `DATABASE_URL`); `db` and `checkDatabaseConnection` come from `@nightcode/database/client`. A session's message history is stored as a JSON column (`Session.messages`); there is no separate messages table.
 
 ### CLI ↔ server
 
@@ -44,10 +44,10 @@ The interesting flow spans `components/input-bar.tsx` and `components/command-me
 - `InputBar` owns an **uncontrolled** `<textarea>` (accessed via ref, not React state). It reports edits through `onContentChange` to `useCommandMenu`, which mirrors the text into state and decides whether the menu is open (text starting with `/`) and what the query is.
 - `useCommandMenu` also owns the menu's keyboard handling (`useKeyboard`: up/down/escape while open) and scroll syncing with the `<scrollbox>`. `CommandMenu` itself is presentational; it re-filters via `getFilteredCommands` (prefix match on `name` against the `COMMANDS` list in `commands.tsx`).
 - Enter is bound to the textarea's `submit` action (Shift+Enter → newline). `textarea.onSubmit` is assigned **once** in a `useEffect`, so it calls through `onSubmitRef.current`, which is reassigned on every render. Keep that ref indirection — otherwise submit handlers go stale. Depending on `showCommandMenu`, it either executes the selected command or submits the text.
-- Running a command (`handleCommand`): clear the textarea, then either call `command.action(ctx)` or, if the command has no `action`, insert `command.value + " "` so the user can type arguments. `CommandContext` (`types.ts`) is the capability object handed to actions; today it only has `exit`. New capabilities must be added to that type **and** supplied in `InputBar.handleCommand`.
+- Running a command (`handleCommand`): clear the textarea, then either call `command.action(ctx)` or, if the command has no `action`, insert `command.value + " "` so the user can type arguments. `CommandContext` (`types.ts`) is the capability object handed to actions (`exit`, `toast`, `dialog`, `navigate`, `mode`/`setMode`, `setModel`). New capabilities must be added to that type **and** supplied in `InputBar.handleCommand`.
 
 To add a slash command: add an entry to `COMMANDS`. `CommandMenu` sizes its name column from the longest command name automatically.
 
 ### Current state
 
-Sessions and messages persist in Postgres, but there is no model integration or auth yet: sessions are created with a hardcoded `userId: "mock-user"`, `StatusBar` shows a hardcoded mode/model, and every command in `COMMANDS` except `/exit` is a placeholder with no `action`.
+Chat streams from Anthropic/OpenAI models through the AI SDK. Agent tools are declared on the server without `execute` and run in the CLI (`cli/src/lib/local-tools.ts`, called from `hooks/use-chat.ts`); tools that change local state wait for the user's approval in a dialog. Users log in with Clerk (`/login`), sessions are scoped to the user, and usage is billed in credits through the Polar sandbox. Every command in `COMMANDS` has an `action`.

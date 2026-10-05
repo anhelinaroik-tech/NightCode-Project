@@ -10,6 +10,7 @@ export type ThemeColors = {
     surface: string;
     dialogSurface: string; 
     thinkingBorder: string; 
+    toolName: string;
     dimSeparator: string;
 };
 
@@ -33,6 +34,7 @@ export const THEMES: Theme[] = [
             surface: "#1A1A24",
             dialogSurface: "#0A0A10", 
             thinkingBorder:"#34344A",
+            toolName: "#738091",
             dimSeparator:"#4E4E66",
         },
     },
@@ -50,6 +52,7 @@ export const THEMES: Theme[] = [
             surface: "#343746",
             dialogSurface: "#21222C",
             thinkingBorder:"#44475A",
+            toolName: "#6272A4",
             dimSeparator:"#6272A4",
         },
     },
@@ -67,6 +70,7 @@ export const THEMES: Theme[] = [
             surface: "#3B4252",
             dialogSurface: "#272C36",
             thinkingBorder:"#434C5E",
+            toolName: "#616E88",
             dimSeparator:"#4C566A",
         },
     },
@@ -84,6 +88,7 @@ export const THEMES: Theme[] = [
             surface: "#3C3836",
             dialogSurface: "#1D2021",
             thinkingBorder:"#504945",
+            toolName: "#928374",
             dimSeparator:"#665C54",
         },
     },
@@ -101,6 +106,7 @@ export const THEMES: Theme[] = [
             surface: "#24283B",
             dialogSurface: "#16161E",
             thinkingBorder:"#292E42",
+            toolName: "#565F89",
             dimSeparator:"#565F89",
         },
     },
@@ -118,6 +124,7 @@ export const THEMES: Theme[] = [
             surface: "#313244",
             dialogSurface: "#181825",
             thinkingBorder:"#45475A",
+            toolName: "#7F849C",
             dimSeparator:"#6C7086",
         },
     },
@@ -135,6 +142,7 @@ export const THEMES: Theme[] = [
             surface: "#2C313C",
             dialogSurface: "#21252B",
             thinkingBorder:"#3E4451",
+            toolName: "#5C6370",
             dimSeparator:"#5C6370",
         },
     },
@@ -152,6 +160,7 @@ export const THEMES: Theme[] = [
             surface: "#073642",
             dialogSurface: "#00212B",
             thinkingBorder:"#094352",
+            toolName: "#586E75",
             dimSeparator:"#586E75",
         },
     },
@@ -169,6 +178,7 @@ export const THEMES: Theme[] = [
             surface: "#1F1D2E",
             dialogSurface: "#16141F",
             thinkingBorder:"#26233A",
+            toolName: "#6E6A86",
             dimSeparator:"#6E6A86",
         },
     },
@@ -186,6 +196,7 @@ export const THEMES: Theme[] = [
             surface: "#343F44",
             dialogSurface: "#232A2E",
             thinkingBorder:"#475258",
+            toolName: "#859289",
             dimSeparator:"#859289",
         },
     },
@@ -203,6 +214,7 @@ export const THEMES: Theme[] = [
             surface: "#2A2A37",
             dialogSurface: "#16161D",
             thinkingBorder:"#363646",
+            toolName: "#727169",
             dimSeparator:"#54546D",
         },
     },
