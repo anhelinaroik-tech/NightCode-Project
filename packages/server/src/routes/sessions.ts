@@ -63,7 +63,7 @@ const app = new Hono<AuthenticatedEnv>()
             sessionId: id,
             userId,
         });
-        return c.json({error: "Session not found"}, 404);
+        return c.json({error: "Session not found. It may have been deleted."}, 404);
     }
 
     Sentry.logger.info("Loaded session", {
@@ -71,6 +71,29 @@ const app = new Hono<AuthenticatedEnv>()
     });
 
     return c.json(session);
+})
+    .delete("/:id", async (c) => {
+    const id = c.req.param("id");
+    const userId = c.get("userId");
+
+    // deleteMany so the userId filter applies: another user's session counts as not found
+    const { count } = await db.session.deleteMany({
+        where: { id, userId },
+    });
+
+    if (count === 0) {
+        Sentry.logger.info("Session not found", {
+            sessionId: id,
+            userId,
+        });
+        return c.json({ error: "Session not found. It may have been deleted." }, 404);
+    }
+
+    Sentry.logger.info("Deleted session", {
+        sessionId: id,
+    });
+
+    return c.json({ id });
 })
     .post("/", createSessionValidator, requireCreditsBalance, async (c)=> {
     // MOCK: Uncomment to simulate slow session loading

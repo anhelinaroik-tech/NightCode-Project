@@ -114,7 +114,7 @@ const app = new Hono<AuthenticatedEnv>()
             });
 
             if(!session){
-                return c.json({error: "Session not found"}, 404);
+                return c.json({error: "Session not found. It may have been deleted."}, 404);
             }
 
             const startTime = Date.now();
@@ -230,7 +230,8 @@ const app = new Hono<AuthenticatedEnv>()
 
                     if (hasPendingToolCalls(event.responseMessage)) return;
 
-                    await db.session.update({
+                    // updateMany: the session may have been deleted while the reply was streaming
+                    await db.session.updateMany({
                         where: { id, userId},
                         data: {
                             messages: event.messages as unknown as Prisma.InputJsonValue,
