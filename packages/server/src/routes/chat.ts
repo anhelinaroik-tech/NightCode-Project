@@ -93,6 +93,29 @@ async function ingestAiUsageWithRetry(params: Parameters<typeof ingestAiUsage>[0
     }
 }
 
+// A turn interrupted by the user can leave tool calls without an output. The model API rejects
+// a call without a result, so close them as errors that tell the model what happened.
+function closeUnfinishedToolParts(message: NightcodeUIMessage): NightcodeUIMessage {
+    if (message.role !== "assistant") return message;
+
+    const parts = message.parts.flatMap((part) => {
+        if (part.type !== "dynamic-tool" && !part.type.startsWith("tool-")) return [part];
+
+        const toolPart = part as { state?: string; input?: unknown };
+        if (toolPart.state === "output-available" || toolPart.state === "output-error") return [part];
+        // The input never finished streaming, so there is no call to report
+        if (toolPart.state === "input-streaming") return [];
+
+        return [{
+            ...part,
+            state: "output-error",
+            errorText: "Interrupted by the user before this tool finished",
+        } as typeof part];
+    });
+
+    return { ...message, parts };
+}
+
 const app = new Hono<AuthenticatedEnv>()
     .post(
         "/",
@@ -119,10 +142,11 @@ const app = new Hono<AuthenticatedEnv>()
             const mergedMessages = [...previousMessages];
 
             for (const message of messages){
-                const incomingMessage = {
+                // The client sends the whole history, so keep the mode/model a message was sent with
+                const incomingMessage = closeUnfinishedToolParts({
                     ...message,
-                    metadata: {...message.metadata, mode, model},
-                } satisfies NightcodeUIMessage;
+                    metadata: {mode, model, ...message.metadata},
+                });
 
                 const existingMessageIndex = mergedMessages.findIndex((m) => m.id === incomingMessage.id);
 
