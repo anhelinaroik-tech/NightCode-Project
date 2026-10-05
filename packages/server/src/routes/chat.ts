@@ -96,8 +96,8 @@ async function ingestAiUsageWithRetry(params: Parameters<typeof ingestAiUsage>[0
 const app = new Hono<AuthenticatedEnv>()
     .post(
         "/",
-        requireCreditsBalance,
         submitValidator,
+        requireCreditsBalance,
         async (c)=>{
             const userId = c.get("userId");
             const {id, messages, mode, model} = c.req.valid("json");

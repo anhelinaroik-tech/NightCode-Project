@@ -95,7 +95,7 @@ const app = new Hono<AuthenticatedEnv>()
 
     return c.json({ id });
 })
-    .post("/", requireCreditsBalance, createSessionValidator, async (c)=> {
+    .post("/", createSessionValidator, requireCreditsBalance, async (c)=> {
     // MOCK: Uncomment to simulate slow session loading
     // await new Promise((r) => setTimeout (r, 5000))
 
