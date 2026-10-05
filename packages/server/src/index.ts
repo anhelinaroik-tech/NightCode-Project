@@ -7,6 +7,7 @@ import health from "./routes/health"
 import auth from "./routes/auth"
 import * as Sentry from "@sentry/hono/bun";
 import { requireAuth } from "./middleware/require-auth";
+import { startPendingUsageFlush } from "./lib/usage-ingestion";
 import billing from "./routes/billing";
 
 const app = new Hono();
@@ -78,6 +79,8 @@ try{
     console.error("[server] Check DATABASE_URL in .env and that the database is running.");
     process.exit(1);
 }
+
+startPendingUsageFlush();
 
 const port = Number(process.env.PORT) || 3000;
 console.log(`[server] Listening on http://localhost:${port}`);
