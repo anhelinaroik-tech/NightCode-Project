@@ -22,7 +22,7 @@ import * as Sentry from "@sentry/hono/bun";
 import type { LanguageModelUsage } from "ai";
 import { requireCreditsBalance } from "../middleware/require-credits-balance";
 import { calculateCreditsForUsage } from "../lib/credits";
-import { ingestAiUsage } from "../lib/polar";
+import { recordUsage } from "../lib/usage-ingestion";
 
 const submitSchema = z.object({
     content: z.string().trim().min(1, "Message cannot be empty"),
@@ -125,23 +125,6 @@ type IngestUsageForMessageParams = {
     status: "complete" | "interrupted" | "error";
 }
 
-const INGEST_RETRY_DELAYS_MS = [1_000, 5_000, 30_000];
-
-// Polar deduplicates events by external_id, so retrying with the same eventId can't bill twice.
-// Runs outside the SSE response, so a slow or failing Polar doesn't delay the reply.
-async function ingestAiUsageWithRetry(params: Parameters<typeof ingestAiUsage>[0]) {
-    for (let attempt = 0; ; attempt++) {
-        try {
-            await ingestAiUsage(params);
-            return;
-        } catch (error) {
-            const delay = INGEST_RETRY_DELAYS_MS[attempt];
-            if (delay === undefined) throw error;
-            await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-    }
-}
-
 async function streamAIResponse(
     stream: Parameters<Parameters<typeof streamSSE>[1]>[0],
     params: StreamParams,
@@ -210,6 +193,7 @@ async function streamAIResponse(
         usageIngestionStarted = true;
         const usage = completedUsage;
 
+        // Not awaited, so a slow or failing Polar doesn't delay the reply
         void (async () => {
             try {
                 const billableUsage = calculateCreditsForUsage({
@@ -218,14 +202,14 @@ async function streamAIResponse(
                     usage,
                 });
 
-                await ingestAiUsageWithRetry({
-                    externalCustomerId: userId,
+                await recordUsage({
+                    userId,
                     eventId: `chat-message:${messageId}`,
                     credits: billableUsage.credits,
                 });
             } catch (error) {
                 Sentry.captureException(error);
-                console.error("Failed to ingest Polar AI usage for chat message", {
+                console.error("Failed to record AI usage for chat message", {
                     error,
                     sessionId,
                     messageId,

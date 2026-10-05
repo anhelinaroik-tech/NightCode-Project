@@ -50,3 +50,18 @@ model Message {
 
   @@index([sessionId])
 }
+
+// Usage charges that Polar hasn't confirmed yet. A row is deleted once Polar accepts the event,
+// so whatever is left after a failed delivery is retried by the server instead of being lost.
+model PendingUsageEvent {
+  // Polar external_id; Polar deduplicates by it, so redelivering can't bill twice
+  id        String   @id
+  userId    String
+  credits   Int
+  attempts  Int      @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
