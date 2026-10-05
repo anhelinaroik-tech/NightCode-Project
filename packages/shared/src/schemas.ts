@@ -17,12 +17,12 @@ export const toolInputSchemas = {
   listDirectory: z.object({
     path: z.string().default(".").describe("Relative directory path to list"),
   }),
-  // шукає текст за назвою
+  // finds files by name
   glob: z.object({
     pattern: z.string().describe("Glob pattern to match files"),
     path: z.string().default(".").describe("Directory to search from"),
   }),
-  // шукає за вмістом
+  // searches file contents
   grep: z.object({
     pattern: z.string().describe("Regex pattern to search for"),
     path: z.string().default(".").describe("Directory to search from"),

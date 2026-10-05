@@ -78,7 +78,10 @@ function SessionChat({
     error,
     pendingApproval,
     respondToApproval,
+    isRunningTools,
   } = useChat(session.id, initialMessages);
+  // A local tool can still be running after the stream ended
+  const isBusy = status === "streaming" || status === "submitted" || isRunningTools;
   const dialog = useDialog();
   const hasSubmitedInitialPromptRef = useRef(false);
 
@@ -90,7 +93,7 @@ function SessionChat({
   // Let the user cancel a reply even before the first streamed chunk arrives.
   useKeyboard((key) => {
     if (
-      key.name === "escape" && isTopLayer("base") && status === "streaming"
+      key.name === "escape" && isTopLayer("base") && isBusy
     ) {
       key.preventDefault();
       interrupt();
@@ -127,8 +130,8 @@ function SessionChat({
     <SessionShell
       onSubmit={(text) => submit({ userText: text, mode, model })}
       inputDisabled={pendingApproval != null}
-      loading={status === "streaming" || status === "submitted"}
-      interruptible={status === "streaming" || status === "submitted"}
+      loading={isBusy}
+      interruptible={isBusy}
       onInterrupt={interrupt}
     >
       {messages.map((msg) => (

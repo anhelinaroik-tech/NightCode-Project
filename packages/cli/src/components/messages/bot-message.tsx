@@ -26,10 +26,23 @@ function isToolPart(part: ClientMessagePart): part is ToolPart{
   return part.type === "dynamic-tool" || part.type.startsWith("tool-");
 }
 
+const MAX_ARGS_LENGTH = 120;
+
+// One line per call: file tools show only the path, never the content they write
 function formatToolArgs(tc: ToolPart): string {
   if(!("input" in tc) || tc.input == null) return "";
   if(typeof tc.input !== "object") return String(tc.input);
-  return Object.values(tc.input).map(String).join(" ");
+  const input = tc.input as Record<string, unknown>;
+  const toolName = tc.type === "dynamic-tool" ? tc.toolName : tc.type.slice("tool-".length);
+
+  const text =
+    toolName === "writeFile" || toolName === "editFile"
+      ? String(input.path ?? "")
+      : toolName === "bash"
+        ? String(input.command ?? "")
+        : Object.values(input).map(String).join(" ");
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length > MAX_ARGS_LENGTH ? `${oneLine.slice(0, MAX_ARGS_LENGTH)}…` : oneLine;
 }
 
 const MAX_RESULT_LINES = 5;
@@ -50,7 +63,7 @@ function lastLines(text: string){
 function formatToolResult(toolName: string, output: unknown): string {
   if(output == null || typeof output !== "object") return String(output ?? "");
   const result = output as Record<string, unknown>;
-  const truncated = result.truncated || result.truncate ? " (truncated)" : "";
+  const truncated = result.truncated ? " (truncated)" : "";
 
   switch(toolName){
     case "readFile": {

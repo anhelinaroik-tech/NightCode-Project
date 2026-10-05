@@ -55,7 +55,7 @@ const state = useMemo(()=> {
         const session = await res.json();
         navigate(
           `/sessions/${session.id}`,
-          // state: { session } передає вже створений об'єкт сесії на наступний екран (/sessions/:id) через історію роутера, щоб його не треба було завантажувати з сервера ще раз.
+          // Pass the created session via router state so the next screen doesn't refetch it
           {replace: true, state:{session, initialPrompt: state}}
         );
       } catch (error){

@@ -62,6 +62,10 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
   const approvalResolversRef = useRef(new Map<string, (approved: boolean) => void>());
   // Set when the user interrupts, so rejected/finished tool calls don't restart the turn.
   const interruptedRef = useRef(false);
+  // Aborted on interrupt, so a running bash command is killed instead of finishing on its own.
+  const toolAbortRef = useRef(new AbortController());
+  // Tools run after the stream ended, so the chat status alone doesn't show that work is going on.
+  const [runningToolCount, setRunningToolCount] = useState(0);
 
   const requestApproval = (request: ToolApprovalRequest) =>
     new Promise<boolean>((resolve) => {
@@ -98,19 +102,13 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
           (m) => m.metadata?.mode && m.metadata?.model,
         )?.metadata;
 
-        // The server merges incoming messages with the stored history by id, so usually only
-        // the last one is needed. But it skips saving while tool calls are pending, so on a
-        // tool-result resubmit the user message that started the turn isn't stored yet.
-        const previousMessage = messages[messages.length - 2];
-        const requestMessages =
-          message.role === "assistant" && previousMessage?.role === "user"
-            ? [previousMessage, message]
-            : [message];
-
+        // The server merges incoming messages with the stored history by id. It skips saving
+        // while tool calls are pending or the turn was interrupted, so it may be missing any
+        // message of an unfinished turn. Sending the whole history keeps nothing from being lost.
         return {
           body: {
             id: sessionId,
-            messages: requestMessages,
+            messages,
             mode: message.metadata?.mode ?? metadata?.mode ?? configRef.current.mode,
             model: message.metadata?.model ?? metadata?.model ?? configRef.current.model,
           },
@@ -145,11 +143,18 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         }
 
 
-        const output = await executeLocalTool(
-          toolCall.toolName,
-          toolCall.input,
-          configRef.current.mode
-        );
+        setRunningToolCount((count) => count + 1);
+        let output: unknown;
+        try {
+          output = await executeLocalTool(
+            toolCall.toolName,
+            toolCall.input,
+            configRef.current.mode,
+            toolAbortRef.current.signal
+          );
+        } finally {
+          setRunningToolCount((count) => count - 1);
+        }
         // Not awaited: awaiting inside onToolCall can deadlock the auto-resubmit.
         void chat.addToolOutput({
           tool: toolCall.toolName,
@@ -176,6 +181,8 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
   const stop = useCallback(() => {
     interruptedRef.current = true;
     rejectAllApprovals();
+    toolAbortRef.current.abort();
+    toolAbortRef.current = new AbortController();
     return chat.stop();
   }, [chat.stop, rejectAllApprovals]);
 
@@ -184,6 +191,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     status: chat.status,
     error: chat.error,
     isStreaming: chat.status === "submitted" || chat.status === "streaming",
+    isRunningTools: runningToolCount > 0,
     submit,
     abort: stop,
     interrupt: stop,

@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, realpath, stat, writeFile } from "fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
 import { isReadOnlyTool, toolInputSchemas, Mode, type ModeType } from "@nightcode/shared";
 
@@ -20,6 +20,9 @@ async function realpathAllowMissing(path: string): Promise<string> {
   } catch (err) {
     const parent = dirname(path);
     if ((err as NodeJS.ErrnoException).code !== "ENOENT" || parent === path) throw err;
+    // A dangling symlink also gives ENOENT; writing through it would follow it outside the project
+    const isDanglingSymlink = await lstat(path).then((info) => info.isSymbolicLink(), () => false);
+    if (isDanglingSymlink) throw new Error("Path is a broken symlink");
     return join(await realpathAllowMissing(parent), basename(path));
   }
 }
@@ -41,7 +44,7 @@ async function resolveInsideCwd(path: string) {
   return { cwd, resolved };
 }
 
-// обрізає занадто довгий текст до ліміту символів
+// Cuts text that is longer than the limit
 function truncate(value: string, limit: number) {
   return value.length > limit
     ? `${value.slice(0, limit)}\n... (truncated, ${value.length} total chars)`
@@ -51,7 +54,9 @@ function truncate(value: string, limit: number) {
 export async function executeLocalTool(
   toolName: string,
   input: unknown,
-  mode: ModeType
+  mode: ModeType,
+  // Aborted when the user interrupts the reply; stops a running bash command
+  signal?: AbortSignal
 ) {
   if (mode === Mode.PLAN && !isReadOnlyTool(toolName)) {
     throw new Error(`Tool ${toolName} is not available in PLAN mode`);
@@ -65,23 +70,23 @@ export async function executeLocalTool(
       return content.length > MAX_FILE_SIZE
         ? {
             content: content.slice(0, MAX_FILE_SIZE),
-            truncate: true,
-            totalLenght: content.length,
+            truncated: true,
+            totalLength: content.length,
           }
         : { content };
     }
     case "listDirectory": {
       const { path } = toolInputSchemas.listDirectory.parse(input);
       const { cwd, resolved } = await resolveInsideCwd(path);
-      const entries = await readdir(resolved);
-      const results: { name: string; type: "file" | "directory" }[] = [];
+      // withFileTypes doesn't follow symlinks, so a broken one can't fail the whole listing
+      const entries = await readdir(resolved, { withFileTypes: true });
+      const results: { name: string; type: "file" | "directory" | "symlink" }[] = [];
 
       for (const entry of entries) {
-        if (entry.startsWith(".") || entry === "node_modules") continue;
-        const info = await stat(join(resolved, entry));
+        if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
         results.push({
-          name: entry,
-          type: info.isDirectory() ? "directory" : "file",
+          name: entry.name,
+          type: entry.isDirectory() ? "directory" : entry.isSymbolicLink() ? "symlink" : "file",
         });
       }
 
@@ -129,7 +134,8 @@ export async function executeLocalTool(
         "-E",
       ];
       if (include) args.push(`--include=${include}`);
-      args.push(pattern, resolved);
+      // -e and -- keep a pattern or path that starts with "-" from being read as an option
+      args.push("-e", pattern, "--", resolved);
 
       const proc = Bun.spawn(["grep", ...args], {
         cwd,
@@ -142,7 +148,7 @@ export async function executeLocalTool(
       ]);
       const exitCode = await proc.exited;
 
-      // grep: 0 = є збіги, 1 = збігів немає, 2+ = помилка
+      // grep exits with 0 on matches, 1 on no matches and 2+ on errors
       if (exitCode !== 0 && exitCode !== 1)
         throw new Error(`grep failed: ${stderr.trim()}`);
       if (!stdout.trim()) return { matches: [], message: "No matches found" };
@@ -205,19 +211,23 @@ export async function executeLocalTool(
         env: { ...process.env, TERM: "dumb" },
         detached: true,
       });
-      const timer = setTimeout(() => {
+      const killGroup = () => {
         try {
           process.kill(-proc.pid, "SIGKILL");
         } catch {
           // group already exited
         }
-      }, timeout);
+      };
+      const timer = setTimeout(killGroup, timeout);
+      signal?.addEventListener("abort", killGroup, { once: true });
       const [stdout, stderr, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
         proc.exited,
       ]);
       clearTimeout(timer);
+      signal?.removeEventListener("abort", killGroup);
+      if (signal?.aborted) throw new Error("Interrupted by the user");
       return {
         stdout: truncate(stdout, MAX_OUTPUT),
         stderr: truncate(stderr, MAX_OUTPUT),
