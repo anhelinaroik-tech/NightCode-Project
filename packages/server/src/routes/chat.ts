@@ -21,7 +21,7 @@ import { buildSystemPrompt } from "../system-prompt";
 import type { AuthenticatedEnv } from "../middleware/require-auth";
 import { requireCreditsBalance } from "../middleware/require-credits-balance";
 import { calculateCreditsForUsage } from "../lib/credits";
-import { ingestAiUsage } from "../lib/polar";
+import { recordUsage } from "../lib/usage-ingestion";
 import { isSupportedChatModel, resolveChatModel } from "../lib/models";
 import * as Sentry from "@sentry/hono/bun";
 
@@ -75,22 +75,6 @@ function addUsage(a: LanguageModelUsage, b: LanguageModelUsage): LanguageModelUs
         outputTokens: sum(a.outputTokens, b.outputTokens),
         totalTokens: sum(a.totalTokens, b.totalTokens),
     };
-}
-
-const INGEST_RETRY_DELAYS_MS = [1_000, 5_000, 30_000];
-
-// Polar deduplicates events by external_id, so retrying with the same eventId can't bill twice.
-async function ingestAiUsageWithRetry(params: Parameters<typeof ingestAiUsage>[0]) {
-    for (let attempt = 0; ; attempt++) {
-        try {
-            await ingestAiUsage(params);
-            return;
-        } catch (error) {
-            const delay = INGEST_RETRY_DELAYS_MS[attempt];
-            if (delay === undefined) throw error;
-            await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-    }
 }
 
 // A turn interrupted by the user can leave tool calls without an output. The model API rejects
@@ -184,14 +168,14 @@ const app = new Hono<AuthenticatedEnv>()
                             usage,
                         });
 
-                        await ingestAiUsageWithRetry({
-                            externalCustomerId: userId,
+                        await recordUsage({
+                            userId,
                             eventId: `chat-request:${requestId}`,
                             credits: billableUsage.credits,
                         });
                     } catch (error) {
                         Sentry.captureException(error);
-                        console.error("Failed to ingest Polar AI usage for chat request", {
+                        console.error("Failed to record AI usage for chat request", {
                             error,
                             sessionId: id,
                             requestId,
