@@ -1,5 +1,5 @@
 # Human approval gates
-For: [spec.md](spec.md) R5. Status: proposed. Confirms: Olexiy Syvak (engineering lead). ClickUp: 869f1am8y.
+For: [spec.md](spec.md) R5. Status: accepted by the product owner. ClickUp: 869f1am8y.
 
 These human decisions must survive automation. Each one is enforced by `.claude/hooks/approval-gate.sh` (a team hook in `.claude/settings.json`, so it applies to every Claude Code session in this repo).
 

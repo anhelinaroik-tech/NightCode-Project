@@ -29,7 +29,7 @@ Automation reports; people decide.
 - **Gates:**
   - Accepting `intent.md` and `spec.md`: product owner.
   - Accepting the plan: engineer.
-  - Merge to `main`: human PR review (Olexiy Syvak).
+  - Merge to `main`: human PR review.
   - DB migrations/deploys: release owner, via `RELEASE_APPROVAL`.
   - CI, hook and settings edits: confirmed in the permission prompt.
   - CI-drift findings: triaged by a human (fix, schedule or dismiss).

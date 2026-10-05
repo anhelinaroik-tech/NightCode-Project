@@ -25,7 +25,6 @@ Concretely:
 
 ## Affected users and systems
 - Engineers working on NightCode, and Claude Code sessions in this repo.
-- The reviewer: Olexiy Syvak.
 - `packages/cli` (local tools), `packages/shared` (tool contracts), `CLAUDE.md`, `.claude/settings.json`, the new `.github/workflows/`, and the new `intent/`.
 - Not affected: the server, the database schema, and the end-user behaviour of the CLI.
 
@@ -42,7 +41,7 @@ Concretely:
 - If `isInside` is deliberately broken (back to `rel.startsWith("..")`), three things fail: `bun test`, the Claude Code Stop hook and the PR's CI check. Restoring it turns all three green.
 - A human sees and decides before the following go through: `db:deploy`/`db:migrate`, `git push` to `main` or a force push, and edits to workflows, hook scripts, `.claude/settings.json` or existing migrations. Every block says why and how to get approval.
 - The CI drift detector returns log / diagnose / propose for 1σ / 2σ / 3σ fixtures, and "insufficient data" for a short history.
-- The PR links this intent, `spec.md` and `plan.md`, and Olexiy Syvak approves it.
+- The PR links this intent, `spec.md` and `plan.md`, and a human reviewer approves it.
 
 ## Open questions
 - Should branch protection on `main` require the CI check? The repo owner decides; it is a GitHub setting, not a file.
