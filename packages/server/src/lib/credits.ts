@@ -64,12 +64,11 @@ function estimateCostUsd(
   );
 };
 
-function convertUsdToCredits(estimateCostUsd: number){
-    if(estimateCostUsd <= 0) return 0;
+function convertUsdToCredits(costUsd: number){
+    if(costUsd <= 0) return 0;
 
     // If a request costs any non-zero amount, charge at least 1 credit, then I round up so partial credits always become a whole credit.
-    // ceil - округлює число вгору до найближчого цілого
-    return Math.max(1, Math.ceil(estimateCostUsd/USD_PER_CREDIT));
+    return Math.ceil(costUsd/USD_PER_CREDIT);
 }
 
 export function calculateCreditsForUsage({

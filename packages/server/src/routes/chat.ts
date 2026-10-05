@@ -473,7 +473,7 @@ const app = new Hono<AuthenticatedEnv>()
             mode: resumableMessage.mode,
         });
     })
-    .post("/:sessionId", requireCreditsBalance, submitValidator, async (c)=>{
+    .post("/:sessionId", submitValidator, requireCreditsBalance, async (c)=>{
         const sessionId = c.req.param("sessionId");
         const userId = c.get("userId");
         const data = c.req.valid("json");
