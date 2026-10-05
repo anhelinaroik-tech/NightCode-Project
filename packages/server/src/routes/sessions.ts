@@ -5,8 +5,9 @@ import {z} from "zod";
 import {db} from "@nightcode/database/client";
 import { Role, Mode, MessageStatus} from "@nightcode/database/enums";
 import * as Sentry from "@sentry/hono/bun";
-import { findSupportedChatModel } from "@nightcode/shared";
 import type { AuthenticatedEnv } from "../middleware/require-auth";
+import { requireCreditsBalance } from "../middleware/require-credits-balance";
+import { isSupportedChatModel } from "../lib/models";
 
 const createSessionSchema = z.object({
     title: z.string(),
@@ -16,7 +17,7 @@ const createSessionSchema = z.object({
         content: z.string(),
         mode: z.enum(Mode),
         // refine() - valid or invalide data
-        model: z.string().refine((id)=> !!findSupportedChatModel(id), "Unsupported model"),
+        model: z.string().refine(isSupportedChatModel, "Unsupported model"),
     }).optional(),
 });
 
@@ -86,7 +87,7 @@ const app = new Hono<AuthenticatedEnv>()
 
     return c.json(session);
 })
-    .post("/", CreateSessionValidator, async (c)=> {
+    .post("/", CreateSessionValidator, requireCreditsBalance, async (c)=> {
     // MOCK: Uncomment to simulate slow session loading
     // await new Promise((r) => setTimeout (r, 5000))
 

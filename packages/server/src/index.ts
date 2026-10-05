@@ -7,6 +7,9 @@ import health from "./routes/health"
 import auth from "./routes/auth"
 import * as Sentry from "@sentry/hono/bun";
 import { requireAuth } from "./middleware/require-auth";
+import { startPendingUsageFlush } from "./lib/usage-ingestion";
+import billing from "./routes/billing";
+
 const app = new Hono();
 
 // Must be registered before any routes so every request is traced and errors reach Sentry.
@@ -54,13 +57,18 @@ app.onError((error, c)=> {
 
 app.use("/sessions/*", requireAuth);
 app.use("/chat/*", requireAuth);
+app.use("/billing/checkout", requireAuth);
+app.use("/billing/portal", requireAuth);
+
 
 // registered to app all routes
 const routes = app
     .route("/health", health)
     .route("/sessions", sessions)
     .route("/chat", chat)
+    .route("/billing",billing)
     .route("/auth", auth);
+
 export type AppType = typeof routes;
 
 // Fail fast with a readable message instead of serving requests that will all fail
@@ -71,6 +79,8 @@ try{
     console.error("[server] Check DATABASE_URL in .env and that the database is running.");
     process.exit(1);
 }
+
+startPendingUsageFlush();
 
 const port = Number(process.env.PORT) || 3000;
 console.log(`[server] Listening on http://localhost:${port}`);

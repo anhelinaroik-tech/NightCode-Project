@@ -19,6 +19,11 @@ import { Prisma } from "@nightcode/database";
 import type { AuthenticatedEnv } from "../middleware/require-auth";
 import * as Sentry from "@sentry/hono/bun";
 
+import type { LanguageModelUsage } from "ai";
+import { requireCreditsBalance } from "../middleware/require-credits-balance";
+import { calculateCreditsForUsage } from "../lib/credits";
+import { recordUsage } from "../lib/usage-ingestion";
+
 const submitSchema = z.object({
     content: z.string().trim().min(1, "Message cannot be empty"),
     mode: z.enum(Mode),
@@ -94,6 +99,7 @@ function getResumableUserMessage(
 
 type StreamParams = {
     sessionId: string;
+    userId: string;
     model: string;
     cwd: string | null;
     history: { role: "user" | "assistant"; content: string }[];
@@ -101,15 +107,37 @@ type StreamParams = {
     abortController: AbortController;
 };
 
+// Only the token totals feed billing, so the detail breakdowns come from the latest step
+function addUsage(a: LanguageModelUsage, b: LanguageModelUsage): LanguageModelUsage {
+    // A step without a count must not wipe out the counts already known from earlier steps
+    const sum = (x: number | undefined, y: number | undefined) =>
+        x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0);
+    return {
+        ...b,
+        inputTokens: sum(a.inputTokens, b.inputTokens),
+        outputTokens: sum(a.outputTokens, b.outputTokens),
+        totalTokens: sum(a.totalTokens, b.totalTokens),
+    };
+}
+
+type IngestUsageForMessageParams = {
+    messageId: string;
+    status: "complete" | "interrupted" | "error";
+}
+
 async function streamAIResponse(
     stream: Parameters<Parameters<typeof streamSSE>[1]>[0],
     params: StreamParams,
 ) {
-    const {sessionId, model, cwd, history, mode, abortController} = params;
+    const {sessionId, userId, model, cwd, history, mode, abortController} = params;
     const startTime = Date.now();
     const tools  = cwd ? createTools(cwd, mode) : undefined;
     const parts: MessagePart[] = [];
     const resolvedModel = resolveChatModel(model);
+    // Summed per finished step, so an aborted reply is still billed for the steps that completed
+    let completedUsage: LanguageModelUsage | null = null;
+    // One usage event per reply: the error path can run after the complete path already billed
+    let usageIngestionStarted = false;
 
     const getFullText = () =>
         parts
@@ -146,7 +174,7 @@ async function streamAIResponse(
         const elapsedMs = Date.now() - startTime;
         const validatedParts = getValidatedParts();
 
-        await db.message.create({
+        return db.message.create({
             data:{
                 sessionId,
                 role: "ASSISTANT",
@@ -160,6 +188,50 @@ async function streamAIResponse(
         });
     };
 
+    const ingestUsageForMessage = ({messageId, status}: IngestUsageForMessageParams) => {
+        if(!completedUsage || usageIngestionStarted) return;
+        usageIngestionStarted = true;
+        const usage = completedUsage;
+
+        // Not awaited, so a slow or failing Polar doesn't delay the reply
+        void (async () => {
+            try {
+                const billableUsage = calculateCreditsForUsage({
+                    provider: resolvedModel.provider,
+                    model: resolvedModel.modelId,
+                    usage,
+                });
+
+                await recordUsage({
+                    userId,
+                    eventId: `chat-message:${messageId}`,
+                    credits: billableUsage.credits,
+                });
+            } catch (error) {
+                Sentry.captureException(error);
+                console.error("Failed to record AI usage for chat message", {
+                    error,
+                    sessionId,
+                    messageId,
+                    status,
+                    userId,
+                });
+            }
+        })();
+    }
+
+    const persistInterruptedMessageAndUsage = async ()=>{
+        const interruptedMessage = await persistInterruptedMessage();
+        if(!interruptedMessage) return;
+
+        ingestUsageForMessage({
+            messageId: interruptedMessage.id,
+            status: "interrupted",
+        });
+    };
+
+
+
     try {
         const result = aiStreamText({
             model: resolvedModel.model,
@@ -169,6 +241,9 @@ async function streamAIResponse(
             stopWhen: tools ? stepCountIs(50) :undefined,
             providerOptions: resolvedModel.providerOptions,
             abortSignal: abortController.signal,
+            onStepFinish(step){
+                completedUsage = completedUsage ? addUsage(completedUsage, step.usage) : step.usage;
+            },
         });
 
         for await(const part of result.fullStream){
@@ -241,7 +316,7 @@ async function streamAIResponse(
         }
 
         if(stream.aborted || abortController.signal.aborted) {
-            await persistInterruptedMessage();
+            await persistInterruptedMessageAndUsage();
             return;
         }
 
@@ -260,6 +335,11 @@ async function streamAIResponse(
             },
         });
 
+        ingestUsageForMessage({
+            messageId: assistantMessage.id,
+            status: "complete",
+        });
+
         const doneEvent: ChatStreamEvent={
             type: "done",
             messageId: assistantMessage.id,
@@ -269,7 +349,7 @@ async function streamAIResponse(
         await stream.writeSSE({ event: "done", data: JSON.stringify(doneEvent)});
     } catch (err) {
         if (abortController.signal.aborted){
-            await persistInterruptedMessage();
+            await persistInterruptedMessageAndUsage();
             return;
         }
 
@@ -278,7 +358,7 @@ async function streamAIResponse(
 
         // A failed save must not hide the model error from the client
         try {
-            await db.message.create({
+            const errorMessage = await db.message.create({
                 data:{
                     sessionId,
                     role: "ERROR",
@@ -287,6 +367,12 @@ async function streamAIResponse(
                     content: message,
                     mode,
                 },
+            });
+
+            // Steps that finished before the failure were still paid for by us
+            ingestUsageForMessage({
+                messageId: errorMessage.id,
+                status: "error",
             });
         } catch (dbErr) {
             Sentry.captureException(dbErr);
@@ -333,7 +419,7 @@ function streamChat(
 
 const app = new Hono<AuthenticatedEnv>()
 // Stream a reply to the last user message that is already stored, instead of posting it again
-    .post("/:sessionId/resume", async (c)=>{
+    .post("/:sessionId/resume", requireCreditsBalance, async (c)=>{
         const sessionId = c.req.param("sessionId");
         const userId = c.get("userId");
 
@@ -364,13 +450,14 @@ const app = new Hono<AuthenticatedEnv>()
         const { entry } = claimStream(sessionId);
         return streamChat(c, entry, {
             sessionId,
+            userId,
             model: resumableMessage.model,
             cwd: session.cwd,
             history: buildConversationHistory(session.messages),
             mode: resumableMessage.mode,
         });
     })
-    .post("/:sessionId", submitValidator, async (c)=>{
+    .post("/:sessionId", submitValidator, requireCreditsBalance, async (c)=>{
         const sessionId = c.req.param("sessionId");
         const userId = c.get("userId");
         const data = c.req.valid("json");
@@ -420,6 +507,7 @@ const app = new Hono<AuthenticatedEnv>()
 
             return streamChat(c, entry, {
                 sessionId,
+                userId,
                 model: data.model,
                 cwd: session.cwd,
                 history,
