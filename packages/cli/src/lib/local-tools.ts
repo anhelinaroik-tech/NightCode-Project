@@ -1,5 +1,5 @@
 import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "path";
 import { isReadOnlyTool, toolInputSchemas, Mode, type ModeType } from "@nightcode/shared";
 
 const MAX_FILE_SIZE = 10_000;
@@ -10,7 +10,8 @@ const DEFAULT_TIMEOUT = 30_000;
 
 function isInside(root: string, target: string) {
   const rel = relative(root, target);
-  return !(rel.startsWith("..") || isAbsolute(rel));
+  // Compare the first segment exactly, so names like "..cache" still count as inside
+  return !(rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel));
 }
 
 // realpath that also works for paths that don't exist yet (e.g. a file about to be written)
@@ -220,13 +221,20 @@ export async function executeLocalTool(
       };
       const timer = setTimeout(killGroup, timeout);
       signal?.addEventListener("abort", killGroup, { once: true });
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]);
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", killGroup);
+      let stdout: string;
+      let stderr: string;
+      let exitCode: number;
+      try {
+        [stdout, stderr, exitCode] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+          proc.exited,
+        ]);
+      } finally {
+        // Also on failure, so a late timer can't kill a reused process group id
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", killGroup);
+      }
       if (signal?.aborted) throw new Error("Interrupted by the user");
       return {
         stdout: truncate(stdout, MAX_OUTPUT),
