@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TextAttributes } from "@opentui/core";
 import { format } from "date-fns";
 import { useLocation, useNavigate } from "react-router";
@@ -22,6 +22,8 @@ export const SessionDialogContent = () => {
     const {colors} = useTheme();
     // First ctrl+d marks a session, the second one on the same session deletes it.
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+    // Sessions whose DELETE is in flight, so pressing ctrl+d again can't send a second request
+    const deletingIdsRef = useRef(new Set<string>());
 
     useEffect(()=>{
         let ignore = false;
@@ -67,12 +69,15 @@ export const SessionDialogContent = () => {
 
     const handleDelete = useCallback(
         async (session: Session) => {
+            if (deletingIdsRef.current.has(session.id)) return;
+
             if (pendingDeleteId !== session.id) {
                 setPendingDeleteId(session.id);
                 return;
             }
 
             setPendingDeleteId(null);
+            deletingIdsRef.current.add(session.id);
             try {
                 const res = await apiClient.sessions[":id"].$delete({
                     param: { id: session.id },
@@ -94,6 +99,8 @@ export const SessionDialogContent = () => {
                     variant: "error",
                     message: error instanceof Error ? error.message : "Failed to delete session",
                 });
+            } finally {
+                deletingIdsRef.current.delete(session.id);
             }
         },
         [pendingDeleteId, show, location.pathname, close, navigate],
@@ -112,7 +119,8 @@ export const SessionDialogContent = () => {
         <DialogSearchList
         items={sessions}
         onSelect={handleSelect}
-        onHighlight={() => setPendingDeleteId(null)}
+        // onHighlight also fires on mouse moves over the same row, so only a different row resets it
+        onHighlight={(session) => setPendingDeleteId((id) => (id === session.id ? id : null))}
         onDelete={(session) => void handleDelete(session)}
         filterFn={(s, query)=> s.title.toLowerCase().includes(query.toLowerCase())}
         renderItem={(session, isSelected) => (

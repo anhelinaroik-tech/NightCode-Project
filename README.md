@@ -17,7 +17,7 @@ Merged chapters are ticked; final acceptance is still pending for all of them.
 - [x] Session Management
 - [x] Tool Calling
 - [x] Completing The User Experience
-- [ ] Usage Based Billing — in review
+- [ ] Usage-Based Billing — in review
 - [ ] Client-Side Tool Execution — in review
 
 ## Requirements
