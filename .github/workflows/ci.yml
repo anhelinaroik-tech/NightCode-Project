@@ -1,0 +1,57 @@
+# Typecheck + tests on every PR (intent/tool-sandbox-verification). Read-only: no production credentials, no database.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Works without DATABASE_URL (see packages/database/prisma.config.ts)
+      - name: Generate Prisma client
+        run: bun run --cwd packages/database db:generate
+
+      # shell: bash adds pipefail, so a failing command isn't masked by tee's exit code
+      - name: Typecheck
+        shell: bash
+        run: bun run typecheck 2>&1 | tee -a ci-output.log
+
+      - name: Tests
+        shell: bash
+        run: bun run test 2>&1 | tee -a ci-output.log
+
+      # Read-only judgment step: summarises the failure for the PR author; it can't edit, push or approve.
+      # Skipped unless the repo owner adds an ANTHROPIC_API_KEY secret.
+      - name: Triage failure with Claude (read-only)
+        if: failure() && env.HAS_ANTHROPIC_KEY == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          {
+            echo "## Claude triage (advisory)"
+            bunx @anthropic-ai/claude-code -p "Read ci-output.log. Identify the most likely cause, say whether the \
+          failure looks flaky or real, and write a three-line summary for the PR author." --allowedTools "Read,Grep,Glob"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -16,3 +16,10 @@ These gates leave the following unchanged:
 - manual deploys.
 
 Every gate makes the existing controls stricter.
+
+**Known limits.** These are team hooks, so they are advisory against a determined bypass:
+- The gates match command text, so an alias or an obfuscated `sh -c` can slip past them.
+- G4 sees only the Edit/Write tools, so a Bash redirect is not caught.
+- Hooks load when a Claude Code session starts.
+
+The backstops are PR review and GitHub branch protection. Moving the gates into managed settings with `allowManagedHooksOnly` plus the sandbox would make them non-negotiable, and that decision belongs to the platform/IT admin.
