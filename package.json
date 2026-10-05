@@ -9,6 +9,8 @@
     "dev:cli": "bun run --watch packages/cli/src/index.tsx",
     "dev:server": "bun run --hot packages/server/src/index.ts",
     "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun test ./packages ./scripts ./.claude/hooks",
+    "check": "bun run typecheck && bun run test",
     "build": "bun run --cwd packages/database db:generate",
     "start": "bun run packages/server/src/index.ts"
   }
