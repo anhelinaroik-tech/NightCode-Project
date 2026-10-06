@@ -1,0 +1,13 @@
+# Control bands for the Stage 6 (Maintain) loop. Read by scripts/detect-ci-drift.ts.
+# Detection is deterministic: no model is involved. A breach only writes a draft intent.md and opens an issue
+# for a human to triage (fix now, schedule or dismiss); dismissals are the signal to retune these numbers.
+metric: ci_test_failure_rate        # share of finished CI runs per ISO week that failed
+source: "gh run list --workflow ci.yml"
+baseline: rolling_8w                # mean and sigma over up to 8 weeks before the last 3 (the evaluation window)
+rules: western_electric             # rule 1: one point beyond 3 sigma; rule 2: 2 of the last 3 beyond 2 sigma
+min_points: 6                       # fewer weeks than this (3 baseline + 3 evaluated) -> "insufficient data"
+min_sigma: 0.05                     # floor, so a perfectly stable baseline doesn't turn noise into a breach
+tiers:
+  1sigma: { action: log }
+  2sigma: { action: diagnose, routes: [issue] }                   # draft intent.md + issue; a human investigates
+  3sigma: { action: propose, routes: [issue, pull_request] }      # draft intent.md + issue; a human opens the fix/revert PR

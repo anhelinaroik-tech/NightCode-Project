@@ -1,0 +1,60 @@
+# Stage 6 (Maintain): weekly control-band check on the CI test failure rate (intent/bands.yaml).
+# Detection is deterministic (scripts/detect-ci-drift.ts). A diagnose/propose breach becomes a draft intent.md
+# posted as a GitHub issue for a human to triage. This job never edits code, pushes or opens PRs.
+name: CI drift
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Actions pinned to commit SHAs; checkout doesn't keep its token (gh uses GH_TOKEN below)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Check the CI failure rate against its bands
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          result=$(bun scripts/detect-ci-drift.ts --write-intent)
+          echo "$result"
+          echo "### CI drift" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "$result" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "intent=$(jq -r '.intentPath // empty' <<<"$result")" >> "$GITHUB_OUTPUT"
+          echo "tier=$(jq -r '.tier // empty' <<<"$result")" >> "$GITHUB_OUTPUT"
+          echo "action=$(jq -r '.action // empty' <<<"$result")" >> "$GITHUB_OUTPUT"
+
+      # One open issue per incident: while a breach lasts, later weeks are added as comments
+      - name: Open or update the triage issue with the draft intent
+        if: steps.detect.outputs.intent != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTENT: ${{ steps.detect.outputs.intent }}
+          TIER: ${{ steps.detect.outputs.tier }}
+          ACTION: ${{ steps.detect.outputs.action }}
+        run: |
+          existing=$(gh issue list --state open --search '"[ci-drift]" in:title' --json number,title \
+            --jq '[.[] | select(.title | startswith("[ci-drift]"))][0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file "$INTENT"
+          else
+            gh issue create --title "[ci-drift] $TIER → $ACTION: CI test failure rate" --body-file "$INTENT"
+          fi

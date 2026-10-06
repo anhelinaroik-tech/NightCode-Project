@@ -70,11 +70,13 @@ If the database is unreachable at startup, the server prints `Cannot connect to 
 
 ## Checks
 
-Type-check every package:
-
 ```bash
-bun run typecheck
+bun run typecheck   # type-check every package
+bun run test        # unit tests: local-tool sandbox, PLAN mode, approval gates, CI drift detector
+bun run check       # both; CI runs this on every PR to main
 ```
+
+Claude Code sessions in this repo also run `bun run check` through a Stop hook and go through the approval gates in `.claude/hooks/approval-gate.sh`. Non-trivial changes start as an `intent/<slug>/intent.md` (see `intent/README.md`).
 
 ## Using the CLI
 

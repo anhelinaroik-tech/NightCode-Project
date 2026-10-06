@@ -8,7 +8,7 @@ const MAX_MATCHES = 50;
 const MAX_OUTPUT = 20_000;
 const DEFAULT_TIMEOUT = 30_000;
 
-function isInside(root: string, target: string) {
+export function isInside(root: string, target: string) {
   const rel = relative(root, target);
   // Compare the first segment exactly, so names like "..cache" still count as inside
   return !(rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel));

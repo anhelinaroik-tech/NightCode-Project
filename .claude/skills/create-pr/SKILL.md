@@ -18,7 +18,7 @@ description: Automate creation of a GitHub Pull Request by fetching context from
      - **Description** (for context)
 
 3. **Run Local Checks**
-   - Run `bun run --cwd packages/cli typecheck` and record pass/fail.
+   - Run `bun run check` (typecheck in every package + all tests) and record pass/fail with the test summary line.
    - `bun run dev` needs a real TTY and cannot be run from Claude Code. Leave that box unchecked with a note, and ask the user whether they ran it.
    - Never tick a box for a check that was not actually run.
 
@@ -47,7 +47,7 @@ description: Automate creation of a GitHub Pull Request by fetching context from
      - <bullets from Step 4>
 
      ## Verification
-     - [ ] `bun run --cwd packages/cli typecheck` passes   <!-- tick only if Step 3's typecheck passed; otherwise leave unticked and note the failure -->
+     - [ ] `bun run check` passes   <!-- tick only if Step 3's check passed; otherwise leave unticked and note the failure -->
      - [ ] `bun run dev` starts without errors (<result, or "not run: <reason>">)
      - [ ] <any other manual check, e.g. a dry run or real use of the change>
 
