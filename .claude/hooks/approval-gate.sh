@@ -46,8 +46,8 @@ if [[ "$tool" == "Bash" ]]; then
 
     # G3: no history rewrites on shared branches
     if [[ "$segment" =~ git[[:space:]]+reset[[:space:]]+--hard[[:space:]]+origin ]] ||
-      grep -Eq '(^|[[:space:]])(--force(-with-lease)?(=[^[:space:]]*)?|-[a-zA-Z]*f[a-zA-Z]*)([[:space:]]|$)|[[:space:]]\+[^[:space:]]+' <<<"$segment"; then
-      block G3 "$segment" "force pushes and hard resets to a remote branch rewrite shared history." \
+      grep -Eq '(^|[[:space:]])(--force(-with-lease)?(=[^[:space:]]*)?|--mirror|-[a-zA-Z]*f[a-zA-Z]*)([[:space:]]|$)|[[:space:]]\+[^[:space:]]+' <<<"$segment"; then
+      block G3 "$segment" "force pushes, mirror pushes and hard resets to a remote branch rewrite shared history." \
         "ask a human to run it by hand if it is really needed."
     fi
 
@@ -64,6 +64,15 @@ if [[ "$tool" == "Bash" ]]; then
       fi
     fi
   done < <(sed -E 's/(&&|\|\||;|\|)/\n/g' <<<"$cmd")
+
+  # G4 via the shell: a command that names a protected path and can write files (redirect, tee, cp, mv, rm,
+  # in-place edits, chmod/ln, or an inline script) needs the same confirmation as an Edit/Write
+  protected='(\.github/workflows|\.claude/settings\.json|\.claude/hooks|prisma/migrations)'
+  redirect=">{1,2}[[:space:]]*[\"']?[^[:space:]&]*$protected"
+  writes='(^|[[:space:];&|(])(tee|cp|mv|rm|truncate|ln|chmod|install|dd)[[:space:]]|(sed|perl)[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-i|(python3?|node|ruby|perl|bun)[[:space:]]+(-[ec]|-[[:space:]]|<<)'
+  if grep -Eq "$redirect" <<<"$cmd" || { grep -Eq "$protected" <<<"$cmd" && grep -Eq "$writes" <<<"$cmd"; }; then
+    ask G4 "$cmd" "this shell command may write to a protected path (CI, Claude Code guardrails or migrations); a human must confirm it."
+  fi
   exit 0
 fi
 

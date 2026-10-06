@@ -20,8 +20,12 @@ if [[ -z "$dirty" ]] && git diff --quiet "$base" HEAD -- packages 2>/dev/null; t
   exit 0
 fi
 
-# Skip a state that already passed: same commit and same uncommitted diff (incl. untracked file names)
-state=$( { git rev-parse HEAD; git diff HEAD -- packages; echo "$dirty"; } 2>/dev/null | shasum | cut -d' ' -f1)
+# Skip a state that already passed: same commit, same tracked diff and same untracked files (names and contents)
+state=$( {
+  git rev-parse HEAD
+  git diff HEAD -- packages
+  git ls-files --others --exclude-standard -z -- packages | xargs -0 shasum 2>/dev/null
+} 2>/dev/null | shasum | cut -d' ' -f1)
 [[ "$(cat "$verified" 2>/dev/null)" == "$state" ]] && { rm -f "$counter"; exit 0; }
 
 if output=$(bun run check 2>&1); then

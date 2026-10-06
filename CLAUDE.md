@@ -65,8 +65,9 @@ Chat streams from Anthropic/OpenAI models through the AI SDK. Agent tools are de
 ## Approval gates
 
 `.claude/hooks/approval-gate.sh` runs before every Bash, Edit and Write call (the list lives in `intent/tool-sandbox-verification/gates.md`):
-- **Blocked:** DB migrations/deploys unless `RELEASE_APPROVAL` is set; `git push` to `main`; force pushes and `git reset --hard origin/…`.
-- **Asks the user:** edits to `.github/workflows/`, `.claude/settings.json`, `.claude/hooks/` and existing Prisma migrations.
+- **Blocked:** DB migrations/deploys unless `RELEASE_APPROVAL` is set; `git push` to `main`; force and mirror pushes; `git reset --hard origin/…`.
+- **Asks the user:** edits to `.github/workflows/`, `.claude/settings.json`, `.claude/hooks/` and existing Prisma migrations, whether through Edit/Write or a shell command that writes there.
+- The gates match command text, so a command whose heredoc only *mentions* `git push … +x` can be blocked. Don't work around it; run it differently or ask the user.
 
 When a gate blocks, tell the user the reason and the route to approval it printed. Do not try to work around it.
 

@@ -55,6 +55,7 @@ describe("G1 release/DB authorization", () => {
   });
 });
 
+// не пушити напряму в main, лише через PR
 describe("G2 main only through PRs", () => {
   test.each([
     "git push origin main",
@@ -105,6 +106,7 @@ describe("G3 no history rewrites", () => {
     "git push -f",
     "git push --force-with-lease origin feature",
     "git push origin +feature",
+    "git push --mirror origin",
     "git reset --hard origin/main",
   ])("blocks `%s`", (command) => {
     const { code, stderr } = bash(command);
@@ -140,6 +142,33 @@ describe("G4 protected paths", () => {
       expect(stdout).toBe("");
     }
   );
+});
+
+describe("G4 through the shell", () => {
+  test.each([
+    "cat > .github/workflows/x.yml <<'EOF'\nname: x\nEOF",
+    "echo '{}' >> .claude/settings.json",
+    "cp /tmp/gate.sh .claude/hooks/approval-gate.sh",
+    "sed -i '' 's/a/b/' .claude/hooks/approval-gate.sh",
+    "rm -rf .github/workflows",
+    "echo x | tee packages/database/prisma/migrations/0001_init/migration.sql",
+    "python3 - <<'EOF'\nopen('.claude/settings.json','w').write('{}')\nEOF",
+  ])("asks before `%s`", (command) => {
+    const { code, stdout } = bash(command);
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout).hookSpecificOutput.permissionDecision).toBe("ask");
+  });
+
+  test.each([
+    "cat .claude/settings.json",
+    "bun test ./.claude/hooks 2>&1 | tail -5",
+    "git add .github/workflows .claude/hooks",
+    "grep -n mirror .claude/hooks/approval-gate.sh",
+  ])("allows read-only `%s`", (command) => {
+    const { code, stdout } = bash(command);
+    expect(code).toBe(0);
+    expect(stdout).toBe("");
+  });
 });
 
 test("everyday commands pass through", () => {
